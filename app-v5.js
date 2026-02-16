@@ -8,7 +8,6 @@ import {
   Square, CheckSquare, Search, Save, Send
 } from 'https://esm.sh/lucide-react@0.330.0';
 
-// МЫ ЗАМЕНИЛИ ЭТИ ТРИ СТРОКИ НА ОФИЦИАЛЬНЫЙ GOOGLE CDN:
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js';
 import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js';
@@ -19,15 +18,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
-// --- CONFIGURATION ---
-// Мы берем конфиг из глобальной переменной, которую зададим в Webflow
-const firebaseConfig = window.__firebase_config; 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
-
-/* === ДАЛЕЕ ВСТАВЛЯЕМ ВАШ ОСНОВНОЙ КОД БЕЗ ИЗМЕНЕНИЙ === */
 
 // --- CONSTANTS ---
 const RUSSIAN_HOLIDAYS = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08', '02-23', '03-08', '05-01', '05-09', '06-12', '11-04'];
@@ -1004,4 +994,5 @@ const App = () => {
 const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(React.createElement(App));
+
 
