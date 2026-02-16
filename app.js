@@ -5,7 +5,7 @@ import {
   Plus, BarChart2, Maximize, LayoutGrid, Trash2, Pencil, Info, PieChart, Check, Settings, 
   UserPlus, X, ClipboardList, Lock, Key, ArrowLeft, ChevronDown, ChevronUp, UserCheck, 
   TrendingUp, AlertCircle, Upload, FileText, AlertOctagon, Download, Clock, XCircle, 
-  Square, CheckSquare, Search, Save, Send 
+  Square, CheckSquare, Search, Save, Send
 } from 'https://esm.sh/lucide-react@0.330.0';
 import { initializeApp } from 'https://esm.sh/firebase@10.8.0/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://esm.sh/firebase@10.8.0/auth';
@@ -995,5 +995,4 @@ const App = () => {
 // Запуск приложения в браузере
 const container = document.getElementById('root');
 const root = createRoot(container);
-
 root.render(React.createElement(App));
