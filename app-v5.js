@@ -13,11 +13,12 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js';
 
 // --- CONFIGURATION ---
-const firebaseConfig = window.__firebase_config; 
+const rawConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : (typeof __firebase_config !== 'undefined' ? __firebase_config : null);
+const firebaseConfig = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
+const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 
 // --- CONSTANTS ---
 const RUSSIAN_HOLIDAYS = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08', '02-23', '03-08', '05-01', '05-09', '06-12', '11-04'];
@@ -26,10 +27,11 @@ const FULL_MONTHS = ['ЯНВАРЬ', 'ФЕВРАЛЬ', 'МАРТ', 'АПРЕЛЬ
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 const INITIAL_DEPARTMENTS_DATA = [
-    { name: 'IT Отдел' }, { name: 'Продажи' }, { name: 'Бухгалтерия' }, { name: 'HR' }
+    { name: 'IT Отдел' }, { name: 'Продажи' }, { name: 'Бухгалтерия' }, { name: 'HR' }, { name: 'Управление' }
 ];
 
 const INITIAL_USERS_DATA = [
+  { id: 100, name: 'Стив Джобс', department: 'Управление', avatar: 'СД', role: 'ceo', yearlyAllowance: 28, carryOverDays: 0, hireDate: '2010-01-01', password: '123' },
   { id: 999, name: 'HR Администратор', department: 'HR', avatar: 'AD', role: 'admin', yearlyAllowance: 0, carryOverDays: 0, hireDate: '2020-01-01', password: 'admin' },
   { id: 50, name: 'Ольга Начальникова', department: 'Продажи', avatar: 'ON', role: 'manager', yearlyAllowance: 28, carryOverDays: 10, hireDate: '2021-03-15', password: '123' },
   { id: 1, name: 'Алексей Петров', department: 'IT Отдел', avatar: 'AP', role: 'employee', yearlyAllowance: 28, carryOverDays: 5, hireDate: '2023-05-10', password: '123' },
@@ -86,6 +88,10 @@ const Header = ({ user, onLogout }) => {
     roleIcon = <Briefcase className="text-white w-6 h-6" />;
     headerBg = 'bg-emerald-600';
     badgeBg = 'bg-emerald-100 text-emerald-700';
+  } else if (user.role === 'ceo') {
+    roleIcon = <Users className="text-white w-6 h-6" />;
+    headerBg = 'bg-purple-600';
+    badgeBg = 'bg-purple-100 text-purple-700';
   }
 
   return (
@@ -113,7 +119,7 @@ const BalanceCard = ({ user, vacations }) => {
     const usedDays = vacations.filter(v => v.userId === user.id && v.status === 'approved').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
     const pendingDays = vacations.filter(v => v.userId === user.id && v.status === 'pending').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
     const draftDays = vacations.filter(v => v.userId === user.id && v.status === 'draft').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
-    const remainingDays = totalAllowance - usedDays;
+    const remainingDays = totalAllowance - usedDays - pendingDays - draftDays;
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -140,7 +146,9 @@ const PersonalYearCalendar = ({ year, user, vacations, users, onSelectRange, sel
         const startDay = (date.getDay() + 6) % 7; 
         const days = [];
         
-        const teamIds = users.filter(u => u.department === user.department && u.id !== user.id).map(u => u.id);
+        const teamIds = user.role === 'ceo'
+            ? users.filter(u => u.id !== user.id && (u.role === 'manager' || (u.role === 'employee' && !users.some(other => other.department === u.department && other.role === 'manager')))).map(u => u.id)
+            : users.filter(u => u.department === user.department && u.id !== user.id).map(u => u.id);
 
         for (let i = 0; i < startDay; i++) days.push(<div key={`e-${i}`} className="w-8 h-8"></div>);
         for (let d = 1; d <= daysInMonth; d++) {
@@ -188,7 +196,7 @@ const PersonalYearCalendar = ({ year, user, vacations, users, onSelectRange, sel
 
             days.push(
                 <div 
-                    key={d} 
+                    key={`d-${monthIndex}-${d}`} 
                     onClick={() => onSelectRange(current)}
                     onMouseEnter={(e) => {
                         if (tooltipText) {
@@ -205,9 +213,9 @@ const PersonalYearCalendar = ({ year, user, vacations, users, onSelectRange, sel
             );
         }
         return (
-            <div key={monthIndex} className="mb-6">
+            <div key={`m-${monthIndex}`} className="mb-6">
                 <h4 className="font-bold text-gray-800 mb-2 pl-2">{FULL_MONTHS[monthIndex]}</h4>
-                <div className="grid grid-cols-7 gap-1 text-center">{WEEKDAYS.map(w => <div key={w} className="text-xs text-gray-400 font-medium w-8">{w}</div>)}{days}</div>
+                <div className="grid grid-cols-7 gap-1 text-center">{WEEKDAYS.map(w => <div key={`wd-${w}`} className="text-xs text-gray-400 font-medium w-8">{w}</div>)}{days}</div>
             </div>
         );
     };
@@ -259,9 +267,10 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
             : [month];
 
     const [expandedDepts, setExpandedDepts] = useState([]);
+    const [ceoFilter, setCeoFilter] = useState('direct'); // 'all' or 'direct'
 
     useEffect(() => {
-        if (currentUser.role === 'admin') setExpandedDepts(departments);
+        if (currentUser.role === 'admin' || currentUser.role === 'ceo') setExpandedDepts(departments);
         else setExpandedDepts([currentUser.department]);
     }, [currentUser, departments]);
 
@@ -282,8 +291,15 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
     const usersByDept = useMemo(() => {
         const grouped = {};
         departments.forEach(d => grouped[d] = []);
-        users.filter(u => u.role !== 'admin').forEach(u => { if(grouped[u.department]) grouped[u.department].push(u); });
-        if (currentUser.role !== 'admin') {
+        users.filter(u => u.role !== 'admin').forEach(u => { 
+            if (currentUser.role === 'ceo' && ceoFilter === 'direct') {
+                const isManager = u.role === 'manager';
+                const isOrphan = u.role === 'employee' && !users.some(other => other.department === u.department && other.role === 'manager');
+                if (!isManager && !isOrphan) return;
+            }
+            if(grouped[u.department]) grouped[u.department].push(u); 
+        });
+        if (currentUser.role !== 'admin' && currentUser.role !== 'ceo') {
             const myDept = currentUser.department;
             if (grouped[myDept]) {
                 grouped[myDept].sort((a, b) => {
@@ -294,7 +310,7 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
             }
         }
         return grouped;
-    }, [users, departments, currentUser]);
+    }, [users, departments, currentUser, ceoFilter]);
 
     return (
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -304,6 +320,12 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
                     {viewMode === 'year' ? year : `${FULL_MONTHS[month]} ${year}`}
                 </div>
                 <div className="flex gap-3 items-center">
+                    {currentUser.role === 'ceo' && (
+                        <div className="flex bg-gray-100 p-1 rounded-lg mr-2">
+                            <button onClick={()=>setCeoFilter('direct')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${ceoFilter==='direct'?'bg-white text-purple-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Мои подчиненные</button>
+                            <button onClick={()=>setCeoFilter('all')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${ceoFilter==='all'?'bg-white text-purple-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Все сотрудники</button>
+                        </div>
+                    )}
                     <div className="flex bg-gray-100 p-1 rounded-lg">
                         <button onClick={()=>setViewMode('month')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode==='month'?'bg-white text-blue-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Месяц</button>
                         <button onClick={()=>setViewMode('quarter')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode==='quarter'?'bg-white text-blue-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Квартал</button>
@@ -324,13 +346,13 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
                             {months.map(mIdx => {
                                 const daysInMonth = new Date(year, mIdx+1, 0).getDate();
                                 return viewMode === 'year' ? 
-                                    <div key={mIdx} className="flex-1 text-center text-xs font-semibold py-3 border-r border-gray-200 text-gray-600">{MONTHS_SHORT[mIdx]}</div> : 
+                                    <div key={`mhdr-${mIdx}`} className="flex-1 text-center text-xs font-semibold py-3 border-r border-gray-200 text-gray-600">{MONTHS_SHORT[mIdx]}</div> : 
                                     Array.from({length:daysInMonth},(_,i)=>i+1).map(d => {
                                         const currentDate = new Date(year, mIdx, d);
                                         const isWe = isWeekend(currentDate);
                                         const isToday = isSameDay(currentDate, today);
                                         return (
-                                            <div key={d} className={`w-8 flex-shrink-0 flex flex-col items-center justify-center text-[10px] py-2 border-r border-gray-200 min-w-[28px] ${isWe ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} ${isToday ? 'bg-blue-50 text-blue-600 font-bold ring-1 ring-inset ring-blue-200' : ''}`}>
+                                            <div key={`dhdr-${mIdx}-${d}`} className={`w-8 flex-shrink-0 flex flex-col items-center justify-center text-[10px] py-2 border-r border-gray-200 min-w-[28px] ${isWe ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} ${isToday ? 'bg-blue-50 text-blue-600 font-bold ring-1 ring-inset ring-blue-200' : ''}`}>
                                                 {d}
                                             </div>
                                         )
@@ -342,12 +364,12 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
                     {departments.map(dept => {
                         const deptUsers = usersByDept[dept];
                         if (!deptUsers || deptUsers.length === 0) return null;
-                        return (<React.Fragment key={dept}>
+                        return (<React.Fragment key={`dept-${dept}`}>
                             <div onClick={()=>toggleDept(dept)} className="bg-gray-100/80 px-4 py-2 text-xs font-bold uppercase cursor-pointer flex items-center gap-2 hover:bg-gray-200/80 border-b border-gray-200 text-gray-700 sticky left-0 z-10">
                                 {expandedDepts.includes(dept)?<ChevronDown className="w-3 h-3"/>:<ChevronRight className="w-3 h-3"/>}{dept}
                             </div>
                             {expandedDepts.includes(dept) && deptUsers.map(u => (
-                                <div key={u.id} className={`flex border-b border-gray-100 h-10 transition-colors ${u.id===currentUser.id?'bg-blue-50/30 hover:bg-blue-50/50':'hover:bg-gray-50'}`}>
+                                <div key={u._docId || u.id} className={`flex border-b border-gray-100 h-10 transition-colors ${u.id===currentUser.id?'bg-blue-50/30 hover:bg-blue-50/50':'hover:bg-gray-50'}`}>
                                     <div className={`w-64 flex-shrink-0 px-4 border-r border-gray-200 flex items-center gap-3 text-sm sticky left-0 z-10 ${u.id===currentUser.id?'bg-blue-50/30 backdrop-blur-sm':'bg-white'}`}>
                                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center font-bold text-xs text-gray-600 border border-gray-200 shadow-sm">{u.avatar}</div>
                                         <span className={`truncate ${u.id===currentUser.id ? 'font-semibold text-blue-700' : 'text-gray-700'}`}>{u.name}</span>
@@ -355,10 +377,10 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
                                     <div className="flex-grow flex">{months.map(mIdx => {
                                         const days = new Date(year, mIdx+1, 0).getDate();
                                         return viewMode === 'year' ? 
-                                        <div key={mIdx} className="flex-1 border-r border-gray-200 relative bg-white">{Array.from({length:days},(_,i)=>i+1).map(d=>{
+                                        <div key={`cyear-${u.id}-${mIdx}`} className="flex-1 border-r border-gray-200 relative bg-white">{Array.from({length:days},(_,i)=>i+1).map(d=>{
                                             const dt = new Date(year,mIdx,d).getTime();
                                             const v = getVacationForDay(u.id, dt);
-                                            return v && v.status === 'approved' ? <div key={d} className="absolute inset-y-1 bg-blue-500 rounded-sm opacity-90" style={{left:`${(d/days)*100}%`, width: `${100/days}%`}}/> : null;
+                                            return v && v.status === 'approved' ? <div key={`v-${u.id}-${mIdx}-${d}`} className="absolute inset-y-1 bg-blue-500 rounded-sm opacity-90" style={{left:`${(d/days)*100}%`, width: `${100/days}%`}}/> : null;
                                         })}</div> :
                                         Array.from({length:days},(_,i)=>i+1).map(d => {
                                             const dt = new Date(year, mIdx, d).getTime();
@@ -376,7 +398,7 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
                                                 else if (v.status === 'draft') content = <div className="absolute inset-1 border-2 border-dashed border-gray-300 rounded-sm bg-gray-50" title="Черновик"></div>;
                                             }
                                             
-                                            return <div key={d} className={`w-8 flex-shrink-0 border-r border-gray-100 relative min-w-[28px] ${isWe ? 'bg-gray-50' : 'bg-white'}`}>
+                                            return <div key={`cday-${u.id}-${mIdx}-${d}`} className={`w-8 flex-shrink-0 border-r border-gray-100 relative min-w-[28px] ${isWe ? 'bg-gray-50' : 'bg-white'}`}>
                                                 {content}
                                             </div>
                                         })
@@ -403,6 +425,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
     const remainingDays = totalAllowance - usedDays;
 
     const potentialReplacements = useMemo(() => {
+        if (user.role === 'ceo') return users.filter(u => u.id !== user.id && u.role === 'manager');
         return users.filter(u => u.department === user.department && u.id !== user.id);
     }, [users, user]);
 
@@ -415,11 +438,16 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
         if (!sel.start || !sel.end) return;
         if (sel.count > remainingDays) return alert(`Ошибка: Выбрано ${sel.count} дн., а доступно всего ${remainingDays}`);
         
+        let finalStatus = status;
+        if (status === 'pending' && (user.role === 'admin' || user.role === 'ceo')) {
+            finalStatus = 'approved';
+        }
+
         const payload = { 
             userId: user.id, 
             startDate: sel.start.toLocaleDateString('en-CA'), 
             endDate: sel.end.toLocaleDateString('en-CA'), 
-            status: status, 
+            status: finalStatus, 
             replacementId: replacementId ? Number(replacementId) : null 
         };
         onAdd(payload);
@@ -443,7 +471,8 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
 
     const confirmSend = () => {
         const drafts = vacs.filter(v => v.userId === user.id && v.status === 'draft');
-        drafts.forEach(d => onUpdate({ ...d, status: 'pending' }));
+        const finalStatus = (user.role === 'admin' || user.role === 'ceo') ? 'approved' : 'pending';
+        drafts.forEach(d => onUpdate({ ...d, status: finalStatus }));
         setIsSendingDrafts(false);
     };
 
@@ -476,7 +505,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
                             >
                                 <option value="">-- Не выбран --</option>
                                 {potentialReplacements.map(u => (
-                                    <option key={u.id} value={u.id}>{u.name}</option>
+                                    <option key={u._docId || u.id} value={u.id}>{u.name}</option>
                                 ))}
                             </select>
                             <UserCheck className="absolute right-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -509,7 +538,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
                     <div className="space-y-2">
                         {vacs.filter(v=>v.userId===user.id).length === 0 && <p className="text-sm text-gray-400 italic">Пока нет запланированных отпусков</p>}
                         {vacs.filter(v=>v.userId===user.id).sort((a,b)=>new Date(a.startDate)-new Date(b.startDate)).map(v=>(
-                            <div key={v.id} className="flex justify-between items-start text-sm border-b border-gray-100 pb-3 last:border-0 hover:bg-gray-50 p-2 rounded-lg transition-colors">
+                            <div key={v._docId || v.id} className="flex justify-between items-start text-sm border-b border-gray-100 pb-3 last:border-0 hover:bg-gray-50 p-2 rounded-lg transition-colors">
                                 <div>
                                     <div className="font-medium text-gray-800">{new Date(v.startDate).toLocaleDateString()} — {new Date(v.endDate).toLocaleDateString()}</div>
                                     <div className="text-xs text-gray-500 mt-1">{countBillableDays(v.startDate, v.endDate)} дн.</div>
@@ -556,8 +585,19 @@ const ManagerApprovals = ({ currentUser, users, vacations, onUpdateVacation }) =
     const [rejectModal, setRejectModal] = useState(null);
     const pendingRequests = useMemo(() => {
         return vacations.filter(v => {
-            const user = users.find(u => u.id === v.userId);
-            return v.status === 'pending' && user && user.department === currentUser.department && user.id !== currentUser.id;
+            const reqUser = users.find(u => u.id === v.userId);
+            if (v.status !== 'pending' || !reqUser || reqUser.id === currentUser.id) return false;
+            
+            if (currentUser.role === 'ceo') {
+                if (reqUser.role === 'manager') return true;
+                if (reqUser.role === 'employee') {
+                    const hasManager = users.some(u => u.department === reqUser.department && u.role === 'manager');
+                    return !hasManager;
+                }
+            } else if (currentUser.role === 'manager') {
+                return reqUser.department === currentUser.department && reqUser.role === 'employee';
+            }
+            return false;
         }).map(v => ({ ...v, user: users.find(u => u.id === v.userId) }));
     }, [vacations, users, currentUser]);
     const handleApprove = (vacation) => onUpdateVacation({ ...vacation, status: 'approved' });
@@ -566,7 +606,7 @@ const ManagerApprovals = ({ currentUser, users, vacations, onUpdateVacation }) =
     return (
         <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden mb-6 animate-fadeIn">
             <div className="bg-orange-50 px-6 py-4 border-b border-orange-100 flex items-center justify-between"><h3 className="font-bold text-orange-800 flex items-center gap-2"><Clock className="w-5 h-5" />Заявки на согласование ({pendingRequests.length})</h3></div>
-            <div className="divide-y divide-gray-100">{pendingRequests.map(req => (<div key={req.id} className="p-4 flex items-center justify-between hover:bg-orange-50/30 transition-colors"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600 text-sm">{req.user.avatar}</div><div><div className="font-semibold text-gray-800">{req.user.name}</div><div className="text-sm text-gray-500">{new Date(req.startDate).toLocaleDateString()} — {new Date(req.endDate).toLocaleDateString()} ({countBillableDays(req.startDate, req.endDate)} дн.)</div></div></div><div className="flex gap-2"><button onClick={() => handleApprove(req)} className="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm"><Check className="w-4 h-4" /> Согласовать</button><button onClick={() => setRejectModal(req)} className="flex items-center gap-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm"><X className="w-4 h-4" /> Отклонить</button></div></div>))}</div>
+            <div className="divide-y divide-gray-100">{pendingRequests.map(req => (<div key={req._docId || req.id} className="p-4 flex items-center justify-between hover:bg-orange-50/30 transition-colors"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600 text-sm">{req.user.avatar}</div><div><div className="font-semibold text-gray-800">{req.user.name}</div><div className="text-sm text-gray-500">{new Date(req.startDate).toLocaleDateString()} — {new Date(req.endDate).toLocaleDateString()} ({countBillableDays(req.startDate, req.endDate)} дн.)</div></div></div><div className="flex gap-2"><button onClick={() => handleApprove(req)} className="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm"><Check className="w-4 h-4" /> Согласовать</button><button onClick={() => setRejectModal(req)} className="flex items-center gap-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm"><X className="w-4 h-4" /> Отклонить</button></div></div>))}</div>
             <ConfirmModal isOpen={!!rejectModal} title="Отклонение" message={`Отклонить заявку сотрудника?`} confirmText="Отклонить" isDanger={true} onConfirm={confirmReject} onCancel={() => setRejectModal(null)} />
         </div>
     );
@@ -587,7 +627,7 @@ const ManagerAnalyticsPage = ({ department, users, vacations, onBack }) => {
         <div className="space-y-6 animate-fadeIn">
             <div className="flex items-center gap-4"><button onClick={onBack} className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition-colors bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm"><ArrowLeft className="w-4 h-4" /> Назад к графику</button><h2 className="text-2xl font-bold text-gray-800">Аналитика отдела "{department}"</h2></div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Всего сотрудников</h3><Users className="w-5 h-5 text-emerald-500" /></div><div className="text-3xl font-bold text-gray-800">{totalUsers}</div></div><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Самый нагруженный месяц</h3><TrendingUp className="w-5 h-5 text-amber-500" /></div><div className="text-3xl font-bold text-gray-800 capitalize">{peakMonth}</div></div><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Использовано дней (Согл.)</h3><PieChart className="w-5 h-5 text-blue-500" /></div><div className="text-3xl font-bold text-gray-800">{totalDaysPlanned}</div></div></div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-red-500" />Зона внимания: Риск выгорания</h3>{burnoutRiskUsers.length > 0 ? (<div className="bg-red-50 border border-red-100 rounded-lg p-4"><p className="text-sm text-red-800 mb-2">Следующие сотрудники еще не запланировали отпуск в 2026 году:</p><div className="flex flex-wrap gap-2">{burnoutRiskUsers.map(u => (<span key={u.id} className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-full text-sm border border-red-200 text-gray-700"><div className="w-5 h-5 rounded-full bg-red-100 text-[10px] flex items-center justify-center font-bold text-red-600">{u.avatar}</div>{u.name}</span>))}</div></div>) : (<div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-center gap-2 text-green-700"><CheckCircle className="w-5 h-5" />Все сотрудники отдела запланировали отдых.</div>)}</div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-red-500" />Зона внимания: Риск выгорания</h3>{burnoutRiskUsers.length > 0 ? (<div className="bg-red-50 border border-red-100 rounded-lg p-4"><p className="text-sm text-red-800 mb-2">Следующие сотрудники еще не запланировали отпуск в 2026 году:</p><div className="flex flex-wrap gap-2">{burnoutRiskUsers.map(u => (<span key={u._docId || u.id} className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-full text-sm border border-red-200 text-gray-700"><div className="w-5 h-5 rounded-full bg-red-100 text-[10px] flex items-center justify-center font-bold text-red-600">{u.avatar}</div>{u.name}</span>))}</div></div>) : (<div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-center gap-2 text-green-700"><CheckCircle className="w-5 h-5" />Все сотрудники отдела запланировали отдых.</div>)}</div>
         </div>
     );
 };
@@ -624,8 +664,8 @@ const DepartmentManagement = ({ departments, setDepartments, users, setUsers, de
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
             <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><Briefcase className="w-5 h-5 text-gray-500" />Управление отделами</h3>
             <div className="space-y-2 mb-4 max-h-[300px] overflow-y-auto">
-                {departments.map(dept => (
-                    <div key={dept} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100 group">
+                {departments.map((dept, index) => (
+                    <div key={`dept-${index}`} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100 group">
                         {editingDept === dept ? (
                             <div className="flex gap-2 flex-1 items-center">
                                 <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} className="flex-1 px-2 py-1 text-sm border border-blue-300 rounded outline-none bg-white" autoFocus />
@@ -649,7 +689,7 @@ const DepartmentManagement = ({ departments, setDepartments, users, setUsers, de
             
             <ConfirmModal isOpen={!!confirmDelete} title="Удаление отдела" message={`Вы уверены, что хотите удалить отдел "${confirmDelete?.dept}"?`} onConfirm={confirmDeleteDept} onCancel={() => setConfirmDelete(null)} />
             <ConfirmModal isOpen={confirmDeleteAll} title="Удаление ВСЕХ отделов" message="ВНИМАНИЕ! Это действие необратимо." confirmText="Удалить всё" onConfirm={handleDeleteAllDepartments} onCancel={() => setConfirmDeleteAll(false)} />
-            {moveModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200"><h4 className="font-bold text-gray-800 text-lg mb-2">Удаление отдела</h4><p className="text-sm text-gray-500 mb-4 text-center">Куда перевести <b>{moveModal.usersCount}</b> сотрудников?</p><select value={targetDept} onChange={(e) => setTargetDept(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm bg-white"><option value="">-- Выберите новый отдел --</option><option value="">Без отдела</option>{departments.filter(d => d !== moveModal.deptToDelete).map(d => (<option key={d} value={d}>{d}</option>))}</select><div className="flex gap-3"><button onClick={() => setMoveModal(null)} className="flex-1 py-2 bg-gray-100 rounded">Отмена</button><button onClick={confirmMoveAndDelete} className="flex-1 py-2 bg-indigo-600 text-white rounded">Перенести</button></div></div></div>)}
+            {moveModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200"><h4 className="font-bold text-gray-800 text-lg mb-2">Удаление отдела</h4><p className="text-sm text-gray-500 mb-4 text-center">Куда перевести <b>{moveModal.usersCount}</b> сотрудников?</p><select value={targetDept} onChange={(e) => setTargetDept(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm bg-white"><option value="">-- Выберите новый отдел --</option><option value="">Без отдела</option>{departments.filter(d => d !== moveModal.deptToDelete).map((d, i) => (<option key={`m-${i}`} value={d}>{d}</option>))}</select><div className="flex gap-3"><button onClick={() => setMoveModal(null)} className="flex-1 py-2 bg-gray-100 rounded">Отмена</button><button onClick={confirmMoveAndDelete} className="flex-1 py-2 bg-indigo-600 text-white rounded">Перенести</button></div></div></div>)}
         </div>
     );
 };
@@ -657,7 +697,7 @@ const DepartmentManagement = ({ departments, setDepartments, users, setUsers, de
 const UserManagement = ({ users, setUsers, departments, vacations }) => {
     const [isAdding, setIsAdding] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({ name: '', department: departments[0], hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
+    const [formData, setFormData] = useState({ name: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
     const fileInputRef = useRef(null);
     const [confirmDelete, setConfirmDelete] = useState(null); 
     const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
@@ -666,14 +706,65 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
     const [bulkModal, setBulkModal] = useState(null); 
     const [bulkValue, setBulkValue] = useState('');
 
-    const resetForm = () => { setFormData({ name: '', department: departments[0], hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' }); setEditingUser(null); setIsAdding(false); };
+    const resetForm = () => { setFormData({ name: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' }); setEditingUser(null); setIsAdding(false); };
     const handleEdit = (user) => { setEditingUser(user); setFormData({ ...user }); setIsAdding(true); };
     const handleDelete = async () => { if (confirmDelete && confirmDelete._docId) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', confirmDelete._docId)); setConfirmDelete(null); }};
     const handleSubmit = async (e) => { e.preventDefault(); const avatar = formData.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); if (editingUser && editingUser._docId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', editingUser._docId), { ...formData, avatar }); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'users'), { ...formData, id: Date.now(), avatar }); } resetForm(); };
     const handleDeleteAllUsers = async () => { const batch = writeBatch(db); users.filter(u => u.role !== 'admin').forEach(u => { if (u._docId) { batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId)); } }); await batch.commit(); setConfirmDeleteAll(false); };
     const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager),Дата найма (YYYY-MM-DD)\nИван Петров,IT Отдел,employee,2024-01-15"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
     const handleExportSchedule = () => { let csvContent = ",,Остаток отпуска на 31.12.2025,"; FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); csvContent += "Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.2026\n"; csvContent += ",,,"; FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); csvContent += ",,\n"; users.filter(u => u.role !== 'admin').forEach(user => { const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); let row = `${user.id},${user.name},${user.carryOverDays},`; let totalUsed = 0; for (let i = 0; i < 12; i++) { const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === 2026; }); if (vac) { const days = countBillableDays(vac.startDate, vac.endDate); totalUsed += days; row += `${vac.startDate},${vac.endDate},${days},согласовано,`; } else { row += ",,,,"; } } const remaining = totalAllowance - totalUsed; row += `${totalUsed},${remaining}\n`; csvContent += row; }); const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'Vacation_Schedule_2026.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
-    const handleFileUpload = (e) => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = async (evt) => { const text = evt.target.result; const lines = text.split('\n'); const newUsers = []; lines.forEach((line, index) => { const parts = line.split(',').map(s => s.trim()); if (parts.length >= 2 && index > 0 && parts[0]) { const name = parts[0]; const dept = parts[1] || 'Без отдела'; const role = parts[2] === 'manager' ? 'manager' : 'employee'; const date = parts[3] || new Date().toISOString().split('T')[0]; const avatar = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); newUsers.push({ id: Date.now() + index, name, department: dept, role, yearlyAllowance: 28, carryOverDays: 0, hireDate: date, password: '123', avatar }); } }); if (newUsers.length > 0) { const batch = writeBatch(db); newUsers.forEach(u => { const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'users')); batch.set(ref, u); }); await batch.commit(); setImportInfo({ message: `Успешно загружено ${newUsers.length} сотрудников`, isError: false }); } else { setImportInfo({ message: 'Ошибка: Не удалось распознать данные', isError: true }); } setTimeout(() => setImportInfo(null), 3000); }; reader.readAsText(file); e.target.value = ''; };
+    
+    const handleFileUpload = (e) => { 
+        const file = e.target.files[0]; 
+        if (!file) return; 
+        const reader = new FileReader(); 
+        reader.onload = async (evt) => { 
+            const text = evt.target.result; 
+            const lines = text.split('\n'); 
+            const newUsers = []; 
+            const newDeptsToCreate = new Set();
+
+            lines.forEach((line, index) => { 
+                const parts = line.split(',').map(s => s.trim()); 
+                if (parts.length >= 2 && index > 0 && parts[0]) { 
+                    const name = parts[0]; 
+                    const dept = parts[1] || 'Без отдела'; 
+
+                    if (dept !== 'Без отдела' && !departments.includes(dept)) {
+                        newDeptsToCreate.add(dept);
+                    }
+
+                    const role = parts[2] === 'manager' ? 'manager' : 'employee'; 
+                    const date = parts[3] || new Date().toISOString().split('T')[0]; 
+                    const avatar = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); 
+                    newUsers.push({ id: Date.now() + index, name, department: dept, role, yearlyAllowance: 28, carryOverDays: 0, hireDate: date, password: '123', avatar }); 
+                } 
+            }); 
+
+            if (newUsers.length > 0) { 
+                const batch = writeBatch(db); 
+                
+                newDeptsToCreate.forEach(deptName => {
+                    const deptRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'departments'));
+                    batch.set(deptRef, { name: deptName });
+                });
+
+                newUsers.forEach(u => { 
+                    const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'users')); 
+                    batch.set(ref, u); 
+                }); 
+
+                await batch.commit(); 
+                setImportInfo({ message: `Успешно загружено ${newUsers.length} сотрудников${newDeptsToCreate.size > 0 ? ` и добавлено ${newDeptsToCreate.size} новых отделов` : ''}`, isError: false }); 
+            } else { 
+                setImportInfo({ message: 'Ошибка: Не удалось распознать данные', isError: true }); 
+            } 
+            setTimeout(() => setImportInfo(null), 3000); 
+        }; 
+        reader.readAsText(file); 
+        e.target.value = ''; 
+    };
+
     const visibleUsers = users.filter(u => u.role !== 'admin');
     const allSelected = visibleUsers.length > 0 && visibleUsers.every(u => selectedIds.includes(u.id));
     const toggleSelectAll = () => { if (allSelected) setSelectedIds([]); else setSelectedIds(visibleUsers.map(u => u.id)); };
@@ -704,11 +795,16 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
                         </div>
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Отдел</label>
-                            <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">{departments.map(d => <option key={d} value={d}>{d}</option>)}</select>
+                            <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">{departments.map((d, i) => <option key={`opt-${i}`} value={d}>{d}</option>)}</select>
                         </div>
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Роль</label>
-                            <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white"><option value="employee">Сотрудник</option><option value="manager">Руководитель</option><option value="admin">Администратор</option></select>
+                            <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                                <option value="employee">Сотрудник</option>
+                                <option value="manager">Руководитель</option>
+                                <option value="ceo">СЕО</option>
+                                <option value="admin">Администратор</option>
+                            </select>
                         </div>
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Дата найма</label>
@@ -739,7 +835,7 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
             )}
             
             <div className="overflow-auto max-h-96"><table className="w-full text-left text-sm"><thead className="bg-gray-50 sticky top-0"><tr><th className="p-3 w-8"><button onClick={toggleSelectAll} className="text-gray-400 hover:text-indigo-600">{allSelected ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5" />}</button></th><th>ФИО</th><th>Отдел</th><th>Квота / Остаток</th><th></th></tr></thead><tbody>
-                {users.filter(u=>u.role!=='admin').map(u=>(<tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                {users.filter(u=>u.role!=='admin').map(u=>(<tr key={u._docId || u.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="p-3"><button onClick={()=>toggleSelectUser(u.id)} className="text-gray-300 hover:text-indigo-500">{selectedIds.includes(u.id)?<CheckSquare className="w-5 h-5 text-indigo-600"/>:<Square className="w-5 h-5 text-gray-300"/>}</button></td>
                     <td className="p-3 font-medium text-gray-800">{u.name} <span className="text-xs text-gray-400">({u.role})</span></td>
                     <td className="p-3 text-gray-500">{u.department}</td>
@@ -766,7 +862,7 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
                         <p className="text-xs text-gray-500 mb-4 text-center">Для {selectedIds.length} выбранных сотрудников</p>
                         {bulkModal.type === 'department' ? (
                             <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option value="">-- Выберите отдел --</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                <option value="">-- Выберите отдел --</option>{departments.map((d, i) => <option key={`bm-${i}`} value={d}>{d}</option>)}
                             </select>
                         ) : (<input type="number" placeholder="Новая квота (дней)" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-500" />)}
                         <div className="flex gap-3"><button onClick={() => { setBulkModal(null); setBulkValue(''); }} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 font-medium">Отмена</button><button onClick={handleBulkSave} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Применить</button></div>
@@ -830,10 +926,10 @@ const LoginScreen = ({ users, onSelectUser }) => {
                         </div>
                         <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                             {filteredUsers.length === 0 && <p className="text-center text-gray-400 text-sm py-4">Сотрудники не найдены</p>}
-                            {filteredUsers.sort((a,b) => (a.role === 'manager' ? -1 : 1)).map(user => (
-                                <button key={user.id} onClick={() => setSelectedUserId(user.id)} className={`w-full flex items-center p-3 rounded-xl border transition-all hover:shadow-sm text-left ${user.role === 'manager' ? 'border-emerald-100 bg-emerald-50 hover:border-emerald-500' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}>
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold mr-4 ${user.role === 'manager' ? 'bg-emerald-200 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{user.avatar}</div>
-                                    <div><div className="font-semibold text-gray-800">{user.name}</div><div className="text-xs text-gray-500">{user.role === 'manager' ? `Руководитель: ${user.department}` : user.department}</div></div>
+                            {filteredUsers.sort((a,b) => (a.role === 'ceo' ? -2 : a.role === 'manager' ? -1 : 1)).map(user => (
+                                <button key={user._docId || user.id} onClick={() => setSelectedUserId(user.id)} className={`w-full flex items-center p-3 rounded-xl border transition-all hover:shadow-sm text-left ${user.role === 'ceo' ? 'border-purple-100 bg-purple-50 hover:border-purple-500' : user.role === 'manager' ? 'border-emerald-100 bg-emerald-50 hover:border-emerald-500' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold mr-4 ${user.role === 'ceo' ? 'bg-purple-200 text-purple-700' : user.role === 'manager' ? 'bg-emerald-200 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{user.avatar}</div>
+                                    <div><div className="font-semibold text-gray-800">{user.name}</div><div className="text-xs text-gray-500">{user.role === 'ceo' ? 'СЕО' : user.role === 'manager' ? `Руководитель: ${user.department}` : user.department}</div></div>
                                     <ChevronRight className="w-5 h-5 ml-auto text-gray-300" />
                                 </button>
                             ))}
@@ -877,7 +973,7 @@ const App = () => {
         const uD = onSnapshot(collection(db,'artifacts',appId,'public','data','departments'), s => {
             const d = s.docs.map(doc=>({id:doc.id,...doc.data()}));
             if(!d.length) INITIAL_DEPARTMENTS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','departments'),x));
-            else { setDeptDocs(d); setDepartments(d.map(x=>x.name)); }
+            else { setDeptDocs(d); setDepartments([...new Set(d.map(x=>x.name))]); }
         }, eH);
         const uU = onSnapshot(collection(db,'artifacts',appId,'public','data','users'), s => {
             const u = s.docs.map(doc=>({_docId:doc.id,...doc.data()}));
@@ -888,7 +984,9 @@ const App = () => {
         return () => { uD(); uU(); uV(); };
     }, [firebaseUser]);
 
+    const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
     const [calendarDate, setCalendarDate] = useState(new Date(2026, 0, 1)); 
+
     const [viewMode, setViewMode] = useState('month');
     const [editingVacation, setEditingVacation] = useState(null);
     const [showManagerStats, setShowManagerStats] = useState(false);
@@ -934,12 +1032,12 @@ const App = () => {
                             <div className="lg:col-span-1 space-y-6"><DepartmentManagement departments={departments} setDepartments={()=>{}} users={users} setUsers={()=>{}} deptDocs={deptDocs} /></div>
                         </div>
                     </div>
-                ) : currentUser.role === 'manager' ? (
+                ) : (currentUser.role === 'manager' || currentUser.role === 'ceo') ? (
                     showManagerStats ? <ManagerAnalyticsPage department={currentUser.department} users={users} vacations={vacations} onBack={() => setShowManagerStats(false)} /> :
                     <div className="space-y-8">
                          <div className="flex justify-between items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                            <h2 className="text-lg font-bold text-emerald-900">Кабинет: {currentUser.department}</h2>
-                            <button onClick={() => setShowManagerStats(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><BarChart2 className="w-4 h-4"/> Статистика</button>
+                            <h2 className="text-lg font-bold text-emerald-900">Кабинет: {currentUser.role === 'ceo' ? 'СЕО' : currentUser.department}</h2>
+                            {currentUser.role !== 'ceo' && <button onClick={() => setShowManagerStats(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><BarChart2 className="w-4 h-4"/> Статистика</button>}
                          </div>
                          <ManagerApprovals currentUser={currentUser} users={users} vacations={vacations} onUpdateVacation={handleUpdateVacation} />
                          
@@ -994,5 +1092,3 @@ const App = () => {
 const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(React.createElement(App));
-
-
