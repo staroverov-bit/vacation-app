@@ -10,7 +10,7 @@ import {
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js';
-import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js';
+import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js';
 
 // --- CONFIGURATION ---
 const rawConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : (typeof __firebase_config !== 'undefined' ? __firebase_config : null);
@@ -21,7 +21,13 @@ const db = getFirestore(app);
 const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 
 // --- CONSTANTS ---
-const RUSSIAN_HOLIDAYS = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08', '02-23', '03-08', '05-01', '05-09', '06-12', '11-04'];
+// Даты в формате DD-MM, сгруппированные по годам
+const DEFAULT_HOLIDAYS = {
+    2025: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
+    2026: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
+};
+let GLOBAL_HOLIDAYS = { ...DEFAULT_HOLIDAYS }; // Mutable global to avoid prop drilling
+
 const MONTHS_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 const FULL_MONTHS = ['ЯНВАРЬ', 'ФЕВРАЛЬ', 'МАРТ', 'АПРЕЛЬ', 'МАЙ', 'ИЮНЬ', 'ИЮЛЬ', 'АВГУСТ', 'СЕНТЯБРЬ', 'ОКТЯБРЬ', 'НОЯБРЬ', 'ДЕКАБРЬ'];
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -41,7 +47,11 @@ const INITIAL_USERS_DATA = [
 const INITIAL_VACATIONS_DATA = [];
 
 // --- HELPERS ---
-const isHoliday = (d) => RUSSIAN_HOLIDAYS.includes(`${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+const isHoliday = (d) => {
+    const year = d.getFullYear();
+    const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    return (GLOBAL_HOLIDAYS[year] || []).includes(dateStr);
+};
 const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d);
 const countBillableDays = (s, e) => {
   if (!s || !e) return 0;
@@ -643,6 +653,135 @@ const AdminStats = ({ users, vacations }) => {
     );
 };
 
+// Новый компонент для управления праздничными днями
+const HolidayManagement = () => {
+    const [inputText, setInputText] = useState('');
+    const [parsed, setParsed] = useState([]);
+    const [holidayToDelete, setHolidayToDelete] = useState(null);
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+    const parseHolidays = (text) => {
+        const monthMap = { января: '01', февраля: '02', марта: '03', апреля: '04', мая: '05', июня: '06', июля: '07', августа: '08', сентября: '09', октября: '10', ноября: '11', декабря: '12' };
+        const holidaysSet = new Set();
+        
+        // Парсинг текстовых форматов (например: "1, 2 и 8 января")
+        const textRegex = /((?:\d{1,2}[,\sи]*)+)(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/gi;
+        let match;
+        while ((match = textRegex.exec(text)) !== null) {
+            const daysStr = match[1];
+            const monthStr = match[2].toLowerCase();
+            const monthNum = monthMap[monthStr];
+            
+            const days = daysStr.match(/\d{1,2}/g);
+            if (days && monthNum) {
+                days.forEach(d => {
+                    holidaysSet.add(`${String(d).padStart(2, '0')}-${monthNum}`);
+                });
+            }
+        }
+
+        // Парсинг числовых форматов (например: "09.01" или "9.1")
+        const numRegex = /\b(\d{1,2})\.(\d{1,2})\b/g;
+        while ((match = numRegex.exec(text)) !== null) {
+            const day = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10);
+            if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+                holidaysSet.add(`${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}`);
+            }
+        }
+
+        const sorted = Array.from(holidaysSet).sort();
+        setParsed(sorted);
+    };
+
+    const handleSave = async () => {
+        const currentYearHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
+        const combined = Array.from(new Set([...currentYearHolidays, ...parsed])).sort();
+        
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), { 
+            [selectedYear]: combined 
+        }, { merge: true });
+        
+        setInputText('');
+        setParsed([]);
+    };
+
+    const confirmDeleteHoliday = async () => {
+        if (!holidayToDelete) return;
+        const currentYearHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
+        const updated = currentYearHolidays.filter(d => d !== holidayToDelete);
+        
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), { 
+            [selectedYear]: updated 
+        }, { merge: true });
+        
+        setHolidayToDelete(null);
+    };
+
+    const displayedHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Calendar className="w-5 h-5 text-gray-500" />Праздничные дни</h3>
+                <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-gray-500">Год:</label>
+                    <select 
+                        value={selectedYear} 
+                        onChange={(e) => setSelectedYear(Number(e.target.value))}
+                        className="px-2 py-1 border rounded-lg outline-none focus:border-blue-500 text-sm bg-gray-50"
+                    >
+                        {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                </div>
+            </div>
+            
+            <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-500 mb-1">Вставьте текст из Консультанта (напр. "1, 2 и 8 января...") или даты ("09.01")</label>
+                <textarea 
+                    className="w-full px-3 py-2 border rounded-lg outline-none focus:border-blue-500 text-sm h-24 resize-none"
+                    value={inputText}
+                    onChange={(e) => { 
+                        setInputText(e.target.value); 
+                        parseHolidays(e.target.value); 
+                    }}
+                    placeholder="Вставьте текст..."
+                />
+            </div>
+            <div className="flex gap-2 mb-4">
+                <button onClick={handleSave} disabled={parsed.length === 0} className="w-full bg-indigo-600 text-white px-3 py-2 rounded text-sm hover:bg-indigo-700 disabled:opacity-50 transition-colors">Добавить ({parsed.length} дн.)</button>
+            </div>
+            <div className="text-xs text-gray-500">
+                <strong>Будут добавлены в {selectedYear} год:</strong>
+                <div className="flex flex-wrap gap-1 mt-2">
+                    {parsed.map(d => <span key={`p-${d}`} className="bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-1 rounded">{d}</span>)}
+                    {parsed.length === 0 && <span>Нет данных</span>}
+                </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500">
+                <strong>Уже в базе для {selectedYear} года ({displayedHolidays.length}):</strong>
+                <div className="flex flex-wrap gap-1 mt-2">
+                    {displayedHolidays.map(d => (
+                        <span key={`h-${d}`} className="flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded group">
+                            {d}
+                            <button onClick={() => setHolidayToDelete(d)} className="text-gray-400 hover:text-red-500 transition-colors" title="Удалить">
+                                <X className="w-3 h-3" />
+                            </button>
+                        </span>
+                    ))}
+                </div>
+            </div>
+            <ConfirmModal 
+                isOpen={!!holidayToDelete} 
+                title="Удаление выходного" 
+                message={`Вы уверены, что хотите удалить выходной день ${holidayToDelete} из ${selectedYear} года?`} 
+                onConfirm={confirmDeleteHoliday} 
+                onCancel={() => setHolidayToDelete(null)} 
+            />
+        </div>
+    );
+};
+
 const DepartmentManagement = ({ departments, setDepartments, users, setUsers, deptDocs }) => {
     const [newDept, setNewDept] = useState('');
     const [editingDept, setEditingDept] = useState(null);
@@ -711,7 +850,7 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
     const handleDelete = async () => { if (confirmDelete && confirmDelete._docId) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', confirmDelete._docId)); setConfirmDelete(null); }};
     const handleSubmit = async (e) => { e.preventDefault(); const avatar = formData.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); if (editingUser && editingUser._docId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', editingUser._docId), { ...formData, avatar }); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'users'), { ...formData, id: Date.now(), avatar }); } resetForm(); };
     const handleDeleteAllUsers = async () => { const batch = writeBatch(db); users.filter(u => u.role !== 'admin').forEach(u => { if (u._docId) { batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId)); } }); await batch.commit(); setConfirmDeleteAll(false); };
-    const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager),Дата найма (YYYY-MM-DD)\nИван Петров,IT Отдел,employee,2024-01-15"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
+    const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager/ceo),Дата найма (YYYY-MM-DD)\nИван Петров,IT Отдел,employee,2024-01-15"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
     const handleExportSchedule = () => { let csvContent = ",,Остаток отпуска на 31.12.2025,"; FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); csvContent += "Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.2026\n"; csvContent += ",,,"; FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); csvContent += ",,\n"; users.filter(u => u.role !== 'admin').forEach(user => { const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); let row = `${user.id},${user.name},${user.carryOverDays},`; let totalUsed = 0; for (let i = 0; i < 12; i++) { const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === 2026; }); if (vac) { const days = countBillableDays(vac.startDate, vac.endDate); totalUsed += days; row += `${vac.startDate},${vac.endDate},${days},согласовано,`; } else { row += ",,,,"; } } const remaining = totalAllowance - totalUsed; row += `${totalUsed},${remaining}\n`; csvContent += row; }); const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'Vacation_Schedule_2026.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
     
     const handleFileUpload = (e) => { 
@@ -734,7 +873,7 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
                         newDeptsToCreate.add(dept);
                     }
 
-                    const role = parts[2] === 'manager' ? 'manager' : 'employee'; 
+                    const role = parts[2] === 'manager' ? 'manager' : parts[2] === 'ceo' ? 'ceo' : 'employee'; 
                     const date = parts[3] || new Date().toISOString().split('T')[0]; 
                     const avatar = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); 
                     newUsers.push({ id: Date.now() + index, name, department: dept, role, yearlyAllowance: 28, carryOverDays: 0, hireDate: date, password: '123', avatar }); 
@@ -956,6 +1095,7 @@ const App = () => {
     const [vacations, setVacations] = useState([]);
     const [deptDocs, setDeptDocs] = useState([]);
     const [firebaseUser, setFirebaseUser] = useState(null);
+    const [holidaysRevision, setHolidaysRevision] = useState(0);
 
     useEffect(() => {
         const initAuth = async () => {
@@ -970,6 +1110,16 @@ const App = () => {
     useEffect(() => {
         if(!firebaseUser) return;
         const eH = (e) => console.log("DB sync...", e);
+        
+        const uH = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), s => {
+            if (s.exists()) {
+                const data = s.data();
+                for (const key in GLOBAL_HOLIDAYS) delete GLOBAL_HOLIDAYS[key];
+                Object.assign(GLOBAL_HOLIDAYS, DEFAULT_HOLIDAYS, data);
+                setHolidaysRevision(prev => prev + 1);
+            }
+        }, eH);
+
         const uD = onSnapshot(collection(db,'artifacts',appId,'public','data','departments'), s => {
             const d = s.docs.map(doc=>({id:doc.id,...doc.data()}));
             if(!d.length) INITIAL_DEPARTMENTS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','departments'),x));
@@ -981,7 +1131,8 @@ const App = () => {
             else setUsers(u);
         }, eH);
         const uV = onSnapshot(collection(db,'artifacts',appId,'public','data','vacations'), s => setVacations(s.docs.map(d=>({_docId:d.id,...d.data()}))), eH);
-        return () => { uD(); uU(); uV(); };
+        
+        return () => { uH(); uD(); uU(); uV(); };
     }, [firebaseUser]);
 
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
@@ -1029,7 +1180,10 @@ const App = () => {
                         <AdminStats users={users} vacations={vacations} departments={departments} />
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             <div className="lg:col-span-2"><UserManagement users={users} setUsers={()=>{}} departments={departments} vacations={vacations} /></div>
-                            <div className="lg:col-span-1 space-y-6"><DepartmentManagement departments={departments} setDepartments={()=>{}} users={users} setUsers={()=>{}} deptDocs={deptDocs} /></div>
+                            <div className="lg:col-span-1 space-y-6">
+                                <DepartmentManagement departments={departments} setDepartments={()=>{}} users={users} setUsers={()=>{}} deptDocs={deptDocs} />
+                                <HolidayManagement />
+                            </div>
                         </div>
                     </div>
                 ) : (currentUser.role === 'manager' || currentUser.role === 'ceo') ? (
