@@ -1,32 +1,31 @@
-import React, { useState, useMemo, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
+import React, { useState, useMemo, useEffect, useRef, createContext, useContext } from 'https://esm.sh/react@18.2.0';
 import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
 import { 
   Calendar, Users, Briefcase, CheckCircle, AlertTriangle, LogOut, ChevronLeft, ChevronRight, 
   Plus, BarChart2, Maximize, LayoutGrid, Trash2, Pencil, Info, PieChart, Check, Settings, 
   UserPlus, X, ClipboardList, Lock, Key, ArrowLeft, ChevronDown, ChevronUp, UserCheck, 
   TrendingUp, AlertCircle, Upload, FileText, AlertOctagon, Download, Clock, XCircle, 
-  Square, CheckSquare, Search, Save, Send
+  Square, CheckSquare, Search, Save, Send, Loader2, Bell
 } from 'https://esm.sh/lucide-react@0.330.0';
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js';
 import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch, setDoc } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js';
 
 // --- CONFIGURATION ---
-const rawConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : (typeof __firebase_config !== 'undefined' ? __firebase_config : null);
-const firebaseConfig = typeof rawConfig === 'string' ? JSON.parse(rawConfig) : rawConfig;
+const rawConfig = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : (typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+const firebaseConfig = typeof rawConfig === 'string' ? JSON.parse(rawConfig || '{}') : rawConfig;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 
 // --- CONSTANTS ---
-// Даты в формате DD-MM, сгруппированные по годам
+const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_HOLIDAYS = {
-    2025: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
-    2026: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
+    [CURRENT_YEAR]: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
+    [CURRENT_YEAR + 1]: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
 };
-let GLOBAL_HOLIDAYS = { ...DEFAULT_HOLIDAYS }; // Mutable global to avoid prop drilling
 
 const MONTHS_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 const FULL_MONTHS = ['ЯНВАРЬ', 'ФЕВРАЛЬ', 'МАРТ', 'АПРЕЛЬ', 'МАЙ', 'ИЮНЬ', 'ИЮЛЬ', 'АВГУСТ', 'СЕНТЯБРЬ', 'ОКТЯБРЬ', 'НОЯБРЬ', 'ДЕКАБРЬ'];
@@ -37,39 +36,53 @@ const INITIAL_DEPARTMENTS_DATA = [
 ];
 
 const INITIAL_USERS_DATA = [
-  { id: 100, name: 'Стив Джобс', department: 'Управление', avatar: 'СД', role: 'ceo', yearlyAllowance: 28, carryOverDays: 0, hireDate: '2010-01-01', password: '123' },
-  { id: 999, name: 'HR Администратор', department: 'HR', avatar: 'AD', role: 'admin', yearlyAllowance: 0, carryOverDays: 0, hireDate: '2020-01-01', password: 'admin' },
-  { id: 50, name: 'Ольга Начальникова', department: 'Продажи', avatar: 'ON', role: 'manager', yearlyAllowance: 28, carryOverDays: 10, hireDate: '2021-03-15', password: '123' },
-  { id: 1, name: 'Алексей Петров', department: 'IT Отдел', avatar: 'AP', role: 'employee', yearlyAllowance: 28, carryOverDays: 5, hireDate: '2023-05-10', password: '123' },
-  { id: 2, name: 'Мария Сидорова', department: 'IT Отдел', avatar: 'MS', role: 'employee', yearlyAllowance: 28, carryOverDays: 0, hireDate: '2024-02-15', password: '123' },
+  { id: 100, name: 'Стив Джобс', email: 'ceo@example.com', department: 'Управление', avatar: 'СД', role: 'ceo', yearlyAllowance: 28, carryOverDays: 0, hireDate: `${CURRENT_YEAR - 5}-01-01`, password: '123' },
+  { id: 999, name: 'HR Администратор', email: 'admin@example.com', department: 'HR', avatar: 'AD', role: 'admin', yearlyAllowance: 0, carryOverDays: 0, hireDate: `${CURRENT_YEAR - 2}-01-01`, password: 'admin' },
+  { id: 50, name: 'Ольга Начальникова', email: 'manager@example.com', department: 'Продажи', avatar: 'ON', role: 'manager', yearlyAllowance: 28, carryOverDays: 10, hireDate: `${CURRENT_YEAR - 1}-03-15`, password: '123' },
+  { id: 1, name: 'Алексей Петров', email: 'employee1@example.com', department: 'IT Отдел', avatar: 'AP', role: 'employee', yearlyAllowance: 28, carryOverDays: 5, hireDate: `${CURRENT_YEAR}-05-10`, password: '123' },
+  { id: 2, name: 'Мария Сидорова', email: 'employee2@example.com', department: 'IT Отдел', avatar: 'MS', role: 'employee', yearlyAllowance: 28, carryOverDays: 0, hireDate: `${CURRENT_YEAR}-02-15`, password: '123' },
 ];
 
-const INITIAL_VACATIONS_DATA = [];
+// --- APP CONTEXT ---
+const AppContext = createContext(null);
 
-// --- HELPERS ---
-const isHoliday = (d) => {
+const useAppContext = () => {
+    const context = useContext(AppContext);
+    if (!context) throw new Error("useAppContext must be used within AppProvider");
+    return context;
+};
+
+// --- PURE HELPERS ---
+const isHoliday = (d, holidaysConfig) => {
     const year = d.getFullYear();
     const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    return (GLOBAL_HOLIDAYS[year] || []).includes(dateStr);
+    return (holidaysConfig[year] || []).includes(dateStr);
 };
-const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d);
-const countBillableDays = (s, e) => {
+
+const isWeekend = (d, holidaysConfig) => {
+    return d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, holidaysConfig);
+};
+
+const countBillableDays = (s, e, holidaysConfig) => {
   if (!s || !e) return 0;
   let c = 0, cur = new Date(s), end = new Date(e);
-  while (cur <= end) { if (!isHoliday(cur)) c++; cur.setDate(cur.getDate() + 1); }
+  while (cur <= end) { 
+      if (!isHoliday(cur, holidaysConfig)) c++; 
+      cur.setDate(cur.getDate() + 1); 
+  }
   return c;
 };
-const checkOverlap = (s1, e1, s2, e2) => s1 <= e2 && s2 <= e1;
-const isFuture = (d) => new Date(d) > new Date(2025, 11, 31);
+
 const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
+
 
 // --- COMPONENTS ---
 
 const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = "Удалить", isDanger = true }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200 animate-fadeIn">
         <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
           {isDanger && <AlertTriangle className="w-5 h-5 text-red-500" />}
           {title}
@@ -84,8 +97,129 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText
   );
 };
 
-const Header = ({ user, onLogout }) => {
+const Header = ({ onLogout }) => {
+  const { currentUser: user, vacations, users } = useAppContext();
+  
+  // Состояния для дропдауна и всплывающих поп-апов
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [activePopups, setActivePopups] = useState([]);
+  
+  const notifRef = useRef(null);
+  const shownNotifsRef = useRef(new Set()); // Чтобы не показывать один и тот же попап дважды за сессию
+
+  // Закрытие дропдауна уведомлений при клике вне его области
+  useEffect(() => {
+      const handleClickOutside = (event) => {
+          if (notifRef.current && !notifRef.current.contains(event.target)) {
+              setShowNotifs(false);
+          }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Динамический расчет уведомлений (ближайшие 7 дней)
+  const notifications = useMemo(() => {
+      if (!user || !vacations || !users) return [];
+      const notifs = [];
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const nextWeek = new Date(today);
+      nextWeek.setDate(today.getDate() + 7);
+
+      // Проверка, является ли сотрудник подчиненным текущего пользователя
+      const isSubordinate = (reqUser) => {
+          if (!reqUser || reqUser.id === user.id) return false;
+          if (user.role === 'ceo') {
+              if (reqUser.role === 'manager') return true;
+              if (reqUser.role === 'employee') {
+                  const hasManager = users.some(u => u.department === reqUser.department && u.role === 'manager');
+                  return !hasManager;
+              }
+          } else if (user.role === 'manager') {
+              return reqUser.department === user.department && reqUser.role === 'employee';
+          }
+          return false;
+      };
+
+      vacations.forEach(v => {
+          if (v.status !== 'approved') return;
+          const startDate = new Date(v.startDate);
+          startDate.setHours(0,0,0,0);
+          
+          if (startDate >= today && startDate <= nextWeek) {
+              const diffTime = startDate - today;
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              const daysText = diffDays === 0 ? 'сегодня' : diffDays === 1 ? 'завтра' : `через ${diffDays} дн.`;
+
+              if (v.userId === user.id) {
+                  // Уведомление для самого себя
+                  notifs.push({
+                      id: `self-${v._docId || v.id}`,
+                      title: 'Ваш отпуск',
+                      message: `Начинается ${daysText} (${new Date(v.startDate).toLocaleDateString()})`,
+                      type: 'self',
+                      date: startDate
+                  });
+              } else {
+                  // Уведомление для руководителя
+                  const reqUser = users.find(u => u.id === v.userId);
+                  if (isSubordinate(reqUser)) {
+                      notifs.push({
+                          id: `sub-${v._docId || v.id}`,
+                          title: `Отпуск: ${reqUser.name}`,
+                          message: `Начинается ${daysText} (${new Date(v.startDate).toLocaleDateString()})`,
+                          type: 'subordinate',
+                          date: startDate
+                      });
+                  }
+              }
+          }
+      });
+      return notifs.sort((a, b) => a.date - b.date);
+  }, [user, vacations, users]);
+
+  // Логика вызова всплывающих Popup (Toast)
+  useEffect(() => {
+      if (notifications.length > 0) {
+          const newPopups = notifications.filter(n => !shownNotifsRef.current.has(n.id));
+
+          if (newPopups.length > 0) {
+              // Добавляем новые уведомления в Set, чтобы не показывать их снова
+              newPopups.forEach(n => shownNotifsRef.current.add(n.id));
+              
+              // Добавляем их в стейт для отображения
+              setActivePopups(prev => [...prev, ...newPopups]);
+
+              // Автоматически убираем попапы через 6 секунд
+              newPopups.forEach(n => {
+                  setTimeout(() => {
+                      setActivePopups(prev => prev.filter(p => p.id !== n.id));
+                  }, 6000);
+              });
+          }
+      }
+  }, [notifications]);
+
+  // Прослушивание глобальных событий для системных уведомлений (например, имитация Email)
+  useEffect(() => {
+      const handleCustomToast = (e) => {
+          const newPopup = { id: Date.now() + Math.random().toString(), ...e.detail };
+          setActivePopups(prev => [...prev, newPopup]);
+          setTimeout(() => {
+              setActivePopups(prev => prev.filter(p => p.id !== newPopup.id));
+          }, 6000);
+      };
+      window.addEventListener('app-toast', handleCustomToast);
+      return () => window.removeEventListener('app-toast', handleCustomToast);
+  }, []);
+
+  const dismissPopup = (id) => {
+      setActivePopups(prev => prev.filter(p => p.id !== id));
+  };
+
   if (!user) return null;
+  
   let roleIcon = <Calendar className="text-white w-6 h-6" />;
   let headerBg = 'bg-blue-600';
   let badgeBg = 'bg-blue-100 text-blue-700';
@@ -105,49 +239,141 @@ const Header = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm">
-      <div className="flex items-center gap-2">
-        <div className={`${headerBg} p-2 rounded-lg transition-colors`}>{roleIcon}</div>
-        <h1 className="text-xl font-bold text-gray-800">{user.role === 'admin' ? 'HR Панель' : 'Отпускной Трекер'}</h1>
-      </div>
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-3 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${badgeBg}`}>{user.avatar}</div>
-          <div className="flex flex-col"><span className="text-sm font-semibold text-gray-700">{user.name}</span><span className="text-xs text-gray-500">{user.department}</span></div>
+    <>
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className={`${headerBg} p-2 rounded-lg transition-colors`}>{roleIcon}</div>
+          <h1 className="text-xl font-bold text-gray-800">{user.role === 'admin' ? 'HR Панель' : 'Отпускной Трекер'}</h1>
         </div>
-        <button onClick={onLogout} className="flex items-center gap-2 text-gray-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50" title="Выйти">
-          <span className="text-sm font-medium">Выйти</span>
-          <LogOut className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-4">
+          
+          {/* Уведомления */}
+          {user.role !== 'admin' && (
+              <div className="relative" ref={notifRef}>
+                  <button 
+                      onClick={() => setShowNotifs(!showNotifs)} 
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors relative"
+                      title="Уведомления"
+                  >
+                      <Bell className="w-5 h-5" />
+                      {notifications.length > 0 && (
+                          <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                      )}
+                  </button>
+                  
+                  {showNotifs && (
+                      <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50 animate-fadeIn">
+                          <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                              <h3 className="font-bold text-gray-800 text-sm">Уведомления</h3>
+                              <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">{notifications.length}</span>
+                          </div>
+                          <div className="max-h-80 overflow-y-auto">
+                              {notifications.length === 0 ? (
+                                  <div className="p-4 text-center text-sm text-gray-500">Нет ближайших отпусков</div>
+                              ) : (
+                                  <div className="divide-y divide-gray-50">
+                                      {notifications.map(n => (
+                                          <div key={n.id} className="p-4 hover:bg-gray-50 transition-colors flex gap-3 items-start">
+                                              <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${n.type === 'self' ? 'bg-blue-500' : 'bg-orange-400'}`}></div>
+                                              <div>
+                                                  <p className="text-xs font-bold text-gray-800">{n.title}</p>
+                                                  <p className="text-sm text-gray-600 leading-snug">{n.message}</p>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+                  )}
+              </div>
+          )}
+
+          <div className="flex items-center gap-3 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${badgeBg}`}>{user.avatar}</div>
+            <div className="flex flex-col"><span className="text-sm font-semibold text-gray-700">{user.name}</span><span className="text-xs text-gray-500">{user.department}</span></div>
+          </div>
+          <button onClick={onLogout} className="flex items-center gap-2 text-gray-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50" title="Выйти">
+            <span className="text-sm font-medium">Выйти</span>
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
-    </div>
+
+      {/* POPUP CONTAINER (Всплывающие уведомления) */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none">
+          {activePopups.map(p => (
+              <div 
+                  key={`popup-${p.id}`} 
+                  className="bg-white border border-gray-100 shadow-2xl rounded-xl p-4 flex items-start gap-3 w-80 pointer-events-auto animate-fadeIn relative"
+                  style={{ animation: 'fadeIn 0.3s ease-out forwards' }}
+              >
+                  <div className={`mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm ${p.type === 'self' ? 'bg-blue-500' : p.type === 'email' ? 'bg-green-500' : 'bg-orange-400'}`}></div>
+                  <div className="flex-1">
+                      <h4 className="text-sm font-bold text-gray-800 mb-0.5">{p.title}</h4>
+                      <p className="text-xs text-gray-600 leading-snug">{p.message}</p>
+                  </div>
+                  <button 
+                      onClick={() => dismissPopup(p.id)} 
+                      className="text-gray-400 hover:text-gray-800 transition-colors p-1 hover:bg-gray-100 rounded-md"
+                  >
+                      <X className="w-4 h-4" />
+                  </button>
+              </div>
+          ))}
+      </div>
+    </>
   );
 };
 
-const BalanceCard = ({ user, vacations }) => {
-    const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays);
-    const usedDays = vacations.filter(v => v.userId === user.id && v.status === 'approved').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
-    const pendingDays = vacations.filter(v => v.userId === user.id && v.status === 'pending').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
-    const draftDays = vacations.filter(v => v.userId === user.id && v.status === 'draft').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
-    const remainingDays = totalAllowance - usedDays - pendingDays - draftDays;
+const BalanceCard = () => {
+    const { currentUser: user, vacations, holidays } = useAppContext();
+    
+    // Memoize calculations to prevent re-running on every small render
+    const stats = useMemo(() => {
+        const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays);
+        let usedDays = 0, pendingDays = 0, draftDays = 0;
+
+        vacations.filter(v => v.userId === user.id).forEach(v => {
+            const days = countBillableDays(v.startDate, v.endDate, holidays);
+            if (v.status === 'approved') usedDays += days;
+            else if (v.status === 'pending') pendingDays += days;
+            else if (v.status === 'draft') draftDays += days;
+        });
+
+        return {
+            totalAllowance, usedDays, pendingDays, draftDays,
+            remainingDays: totalAllowance - usedDays - pendingDays - draftDays
+        };
+    }, [user, vacations, holidays]);
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
             <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
-                <PieChart className="w-4 h-4 text-gray-500" /> Мой Баланс ({new Date().getFullYear() + 1})
+                <PieChart className="w-4 h-4 text-gray-500" /> Мой Баланс
             </h3>
             <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="bg-blue-50 p-3 rounded-lg text-center"><div className="text-xs text-blue-600 font-medium mb-1">Всего</div><div className="text-xl font-bold text-blue-800">{totalAllowance}</div></div>
-                <div className="bg-green-50 p-3 rounded-lg text-center"><div className="text-xs text-green-600 font-medium mb-1">Одобрено</div><div className="text-xl font-bold text-green-800">{usedDays}</div></div>
-                <div className={`p-3 rounded-lg text-center ${remainingDays < 0 ? 'bg-red-50' : 'bg-gray-100'}`}><div className={`text-xs font-medium mb-1 ${remainingDays < 0 ? 'text-red-600' : 'text-gray-600'}`}>Остаток</div><div className={`text-xl font-bold ${remainingDays < 0 ? 'text-red-800' : 'text-gray-800'}`}>{remainingDays}</div></div>
+                <div className="bg-blue-50 p-3 rounded-lg text-center">
+                    <div className="text-xs text-blue-600 font-medium mb-1">Всего</div>
+                    <div className="text-xl font-bold text-blue-800">{stats.totalAllowance}</div>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <div className="text-xs text-green-600 font-medium mb-1">Одобрено</div>
+                    <div className="text-xl font-bold text-green-800">{stats.usedDays}</div>
+                </div>
+                <div className={`p-3 rounded-lg text-center ${stats.remainingDays < 0 ? 'bg-red-50' : 'bg-gray-100'}`}>
+                    <div className={`text-xs font-medium mb-1 ${stats.remainingDays < 0 ? 'text-red-600' : 'text-gray-600'}`}>Остаток</div>
+                    <div className={`text-xl font-bold ${stats.remainingDays < 0 ? 'text-red-800' : 'text-gray-800'}`}>{stats.remainingDays}</div>
+                </div>
             </div>
-            {pendingDays > 0 && <div className="mb-2 bg-orange-50 border border-orange-100 rounded-lg p-2 flex items-center justify-center gap-2 text-xs text-orange-700"><Clock className="w-3 h-3" /> На согласовании: <b>{pendingDays}</b> дн.</div>}
-            {draftDays > 0 && <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-2 flex items-center justify-center gap-2 text-xs text-gray-600"><FileText className="w-3 h-3" /> В черновиках: <b>{draftDays}</b> дн.</div>}
+            {stats.pendingDays > 0 && <div className="mb-2 bg-orange-50 border border-orange-100 rounded-lg p-2 flex items-center justify-center gap-2 text-xs text-orange-700"><Clock className="w-3 h-3" /> На согласовании: <b>{stats.pendingDays}</b> дн.</div>}
+            {stats.draftDays > 0 && <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-2 flex items-center justify-center gap-2 text-xs text-gray-600"><FileText className="w-3 h-3" /> В черновиках: <b>{stats.draftDays}</b> дн.</div>}
         </div>
     );
 };
 
-const PersonalYearCalendar = ({ year, user, vacations, users, onSelectRange, selection, balance, onPrevYear, onNextYear }) => {
+const PersonalYearCalendar = ({ year, onSelectRange, selection, balance, onPrevYear, onNextYear }) => {
+    const { currentUser: user, vacations, users, holidays } = useAppContext();
     const [tooltip, setTooltip] = useState(null);
 
     const renderMonth = (monthIndex) => {
@@ -161,9 +387,11 @@ const PersonalYearCalendar = ({ year, user, vacations, users, onSelectRange, sel
             : users.filter(u => u.department === user.department && u.id !== user.id).map(u => u.id);
 
         for (let i = 0; i < startDay; i++) days.push(<div key={`e-${i}`} className="w-8 h-8"></div>);
+        
         for (let d = 1; d <= daysInMonth; d++) {
             const current = new Date(year, monthIndex, d);
-            const isWe = isWeekend(current);
+            const isWe = isWeekend(current, holidays);
+            
             const vac = vacations.find(v => v.userId === user.id && current >= new Date(v.startDate).setHours(0,0,0,0) && current <= new Date(v.endDate).setHours(0,0,0,0) && v.status !== 'rejected');
             const teamVacs = vacations.filter(v => teamIds.includes(v.userId) && current >= new Date(v.startDate).setHours(0,0,0,0) && current <= new Date(v.endDate).setHours(0,0,0,0) && v.status !== 'rejected');
             
@@ -265,7 +493,8 @@ const PersonalYearCalendar = ({ year, user, vacations, users, onSelectRange, sel
     );
 };
 
-const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev, onNext, viewMode, setViewMode, currentUser, localDraft }) => {
+const TeamCalendar = ({ currentMonthDate, onPrev, onNext, viewMode, setViewMode, localDraft }) => {
+    const { vacations, users, departments, currentUser, holidays } = useAppContext();
     const year = currentMonthDate.getFullYear();
     const month = currentMonthDate.getMonth();
     const today = new Date();
@@ -277,7 +506,7 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
             : [month];
 
     const [expandedDepts, setExpandedDepts] = useState([]);
-    const [ceoFilter, setCeoFilter] = useState('direct'); // 'all' or 'direct'
+    const [ceoFilter, setCeoFilter] = useState('direct');
 
     useEffect(() => {
         if (currentUser.role === 'admin' || currentUser.role === 'ceo') setExpandedDepts(departments);
@@ -359,7 +588,7 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
                                     <div key={`mhdr-${mIdx}`} className="flex-1 text-center text-xs font-semibold py-3 border-r border-gray-200 text-gray-600">{MONTHS_SHORT[mIdx]}</div> : 
                                     Array.from({length:daysInMonth},(_,i)=>i+1).map(d => {
                                         const currentDate = new Date(year, mIdx, d);
-                                        const isWe = isWeekend(currentDate);
+                                        const isWe = isWeekend(currentDate, holidays);
                                         const isToday = isSameDay(currentDate, today);
                                         return (
                                             <div key={`dhdr-${mIdx}-${d}`} className={`w-8 flex-shrink-0 flex flex-col items-center justify-center text-[10px] py-2 border-r border-gray-200 min-w-[28px] ${isWe ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} ${isToday ? 'bg-blue-50 text-blue-600 font-bold ring-1 ring-inset ring-blue-200' : ''}`}>
@@ -395,7 +624,7 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
                                         Array.from({length:days},(_,i)=>i+1).map(d => {
                                             const dt = new Date(year, mIdx, d).getTime();
                                             const v = getVacationForDay(u.id, dt);
-                                            const isWe = isWeekend(new Date(year, mIdx, d));
+                                            const isWe = isWeekend(new Date(year, mIdx, d), holidays);
                                             const isLocal = u.id === currentUser.id && isLocalDraftDay(dt);
                                             
                                             let content = null;
@@ -423,15 +652,16 @@ const TeamCalendar = ({ vacations, users, departments, currentMonthDate, onPrev,
     );
 };
 
-const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) => {
+const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
+    const { currentUser: user, users, vacations: vacs, holidays } = useAppContext();
     const [sel, setSel] = useState({ start: null, end: null, count: 0 });
     const [replacementId, setReplacementId] = useState('');
     const [isSendingDrafts, setIsSendingDrafts] = useState(false);
+    
     const draftCount = vacs.filter(v => v.userId === user.id && v.status === 'draft').length;
     
-    // Calculate Balance
     const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays);
-    const usedDays = vacs.filter(v => v.userId === user.id && v.status !== 'rejected' && v.status !== 'draft').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
+    const usedDays = vacs.filter(v => v.userId === user.id && v.status !== 'rejected' && v.status !== 'draft').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate, holidays), 0);
     const remainingDays = totalAllowance - usedDays;
 
     const potentialReplacements = useMemo(() => {
@@ -441,7 +671,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
 
     const handleSelect = (date) => {
         if (!sel.start || (sel.start && sel.end)) { setSel({ start: date, end: null, count: 0 }); } 
-        else { let s = sel.start, e = date; if (date < s) { s = date; e = sel.start; } const days = countBillableDays(s, e); setSel({ start: s, end: e, count: days }); }
+        else { let s = sel.start, e = date; if (date < s) { s = date; e = sel.start; } const days = countBillableDays(s, e, holidays); setSel({ start: s, end: e, count: days }); }
     };
     
     const handleAction = (status) => {
@@ -469,7 +699,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
         const drafts = vacs.filter(v => v.userId === user.id && v.status === 'draft');
         if (!drafts.length) return;
         
-        const totalDraftDays = drafts.reduce((acc, d) => acc + countBillableDays(d.startDate, d.endDate), 0);
+        const totalDraftDays = drafts.reduce((acc, d) => acc + countBillableDays(d.startDate, d.endDate, holidays), 0);
         
         if (totalDraftDays > remainingDays) {
             alert(`Ошибка: Черновики содержат ${totalDraftDays} дн., а доступно ${remainingDays}. Нельзя отправить.`);
@@ -489,7 +719,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex flex-col gap-6">
-                <BalanceCard user={user} vacations={vacs} />
+                <BalanceCard />
                 
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                     <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Plus className="w-5 h-5 text-blue-600"/>Параметры новой заявки</h3>
@@ -551,7 +781,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
                             <div key={v._docId || v.id} className="flex justify-between items-start text-sm border-b border-gray-100 pb-3 last:border-0 hover:bg-gray-50 p-2 rounded-lg transition-colors">
                                 <div>
                                     <div className="font-medium text-gray-800">{new Date(v.startDate).toLocaleDateString()} — {new Date(v.endDate).toLocaleDateString()}</div>
-                                    <div className="text-xs text-gray-500 mt-1">{countBillableDays(v.startDate, v.endDate)} дн.</div>
+                                    <div className="text-xs text-gray-500 mt-1">{countBillableDays(v.startDate, v.endDate, holidays)} дн.</div>
                                     <div className={`text-[10px] font-bold mt-1 px-2 py-0.5 rounded-full inline-block 
                                         ${v.status==='approved'?'bg-green-100 text-green-700':
                                           v.status==='rejected'?'bg-red-100 text-red-700':
@@ -561,7 +791,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
                                     </div>
                                     {v.replacementId && <div className="text-[10px] text-gray-400 mt-1 flex items-center gap-1"><UserCheck className="w-3 h-3"/> Зам: {users.find(u=>u.id===v.replacementId)?.name}</div>}
                                 </div>
-                                {isFuture(v.startDate) && <button onClick={()=>onDel(v.id)} className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors" title="Удалить"><Trash2 className="w-4 h-4"/></button>}
+                                {<button onClick={()=>onDel(v.id)} className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded transition-colors" title="Удалить"><Trash2 className="w-4 h-4"/></button>}
                             </div>
                         ))}
                     </div>
@@ -571,9 +801,6 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
             <div className="md:col-span-2 space-y-8">
                  <PersonalYearCalendar 
                     year={calendarProps.currentMonthDate.getFullYear()} 
-                    user={user} 
-                    vacations={vacs} 
-                    users={users}
                     onSelectRange={handleSelect} 
                     selection={sel} 
                     balance={remainingDays} 
@@ -583,7 +810,7 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
                  
                  <div className="mt-8">
                     <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><Users className="w-6 h-6"/> График отдела</h2>
-                    <TeamCalendar vacations={vacs} users={users} departments={[...new Set(users.map(u=>u.department))]} currentUser={user} {...calendarProps} />
+                    <TeamCalendar localDraft={sel} {...calendarProps} />
                  </div>
             </div>
             <ConfirmModal isOpen={isSendingDrafts} title="Отправка черновиков" message={`Отправить все черновики (${draftCount}) на согласование?`} confirmText="Отправить" isDanger={false} onConfirm={confirmSend} onCancel={() => setIsSendingDrafts(false)} />
@@ -591,8 +818,10 @@ const UserView = ({ user, users, vacs, onAdd, onUpdate, onDel, calendarProps }) 
     );
 };
 
-const ManagerApprovals = ({ currentUser, users, vacations, onUpdateVacation }) => {
+const ManagerApprovals = ({ onUpdateVacation }) => {
+    const { currentUser, users, vacations, holidays } = useAppContext();
     const [rejectModal, setRejectModal] = useState(null);
+
     const pendingRequests = useMemo(() => {
         return vacations.filter(v => {
             const reqUser = users.find(u => u.id === v.userId);
@@ -610,41 +839,131 @@ const ManagerApprovals = ({ currentUser, users, vacations, onUpdateVacation }) =
             return false;
         }).map(v => ({ ...v, user: users.find(u => u.id === v.userId) }));
     }, [vacations, users, currentUser]);
+
     const handleApprove = (vacation) => onUpdateVacation({ ...vacation, status: 'approved' });
-    const confirmReject = () => { if (rejectModal) { onUpdateVacation({ ...rejectModal, status: 'rejected' }); setRejectModal(null); } };
+    
+    const confirmReject = () => { 
+        if (rejectModal) { 
+            onUpdateVacation({ ...rejectModal, status: 'rejected' }); 
+            setRejectModal(null); 
+        } 
+    };
+
     if (pendingRequests.length === 0) return null;
+
     return (
         <div className="bg-white rounded-xl shadow-sm border border-orange-200 overflow-hidden mb-6 animate-fadeIn">
-            <div className="bg-orange-50 px-6 py-4 border-b border-orange-100 flex items-center justify-between"><h3 className="font-bold text-orange-800 flex items-center gap-2"><Clock className="w-5 h-5" />Заявки на согласование ({pendingRequests.length})</h3></div>
-            <div className="divide-y divide-gray-100">{pendingRequests.map(req => (<div key={req._docId || req.id} className="p-4 flex items-center justify-between hover:bg-orange-50/30 transition-colors"><div className="flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600 text-sm">{req.user.avatar}</div><div><div className="font-semibold text-gray-800">{req.user.name}</div><div className="text-sm text-gray-500">{new Date(req.startDate).toLocaleDateString()} — {new Date(req.endDate).toLocaleDateString()} ({countBillableDays(req.startDate, req.endDate)} дн.)</div></div></div><div className="flex gap-2"><button onClick={() => handleApprove(req)} className="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm"><Check className="w-4 h-4" /> Согласовать</button><button onClick={() => setRejectModal(req)} className="flex items-center gap-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm"><X className="w-4 h-4" /> Отклонить</button></div></div>))}</div>
-            <ConfirmModal isOpen={!!rejectModal} title="Отклонение" message={`Отклонить заявку сотрудника?`} confirmText="Отклонить" isDanger={true} onConfirm={confirmReject} onCancel={() => setRejectModal(null)} />
+            <div className="bg-orange-50 px-6 py-4 border-b border-orange-100 flex items-center justify-between">
+                <h3 className="font-bold text-orange-800 flex items-center gap-2">
+                    <Clock className="w-5 h-5" /> Заявки на согласование ({pendingRequests.length})
+                </h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+                {pendingRequests.map(req => (
+                    <div key={req._docId || req.id} className="p-4 flex items-center justify-between hover:bg-orange-50/30 transition-colors">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600 text-sm">
+                                {req.user.avatar}
+                            </div>
+                            <div>
+                                <div className="font-semibold text-gray-800">{req.user.name}</div>
+                                <div className="text-sm text-gray-500">
+                                    {new Date(req.startDate).toLocaleDateString()} — {new Date(req.endDate).toLocaleDateString()} 
+                                    <span className="ml-1 font-medium text-indigo-600">({countBillableDays(req.startDate, req.endDate, holidays)} дн.)</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => handleApprove(req)} className="flex items-center gap-1 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm">
+                                <Check className="w-4 h-4" /> Согласовать
+                            </button>
+                            <button onClick={() => setRejectModal(req)} className="flex items-center gap-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm">
+                                <X className="w-4 h-4" /> Отклонить
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <ConfirmModal 
+                isOpen={!!rejectModal} 
+                title="Отклонение" 
+                message={`Отклонить заявку сотрудника?`} 
+                confirmText="Отклонить" 
+                isDanger={true} 
+                onConfirm={confirmReject} 
+                onCancel={() => setRejectModal(null)} 
+            />
         </div>
     );
 };
 
-const ManagerAnalyticsPage = ({ department, users, vacations, onBack }) => {
+const ManagerAnalyticsPage = ({ onBack }) => {
+    const { currentUser, users, vacations, holidays } = useAppContext();
+    const department = currentUser.department;
+
     const deptUsers = users.filter(u => u.department === department);
     const deptVacations = vacations.filter(v => deptUsers.find(u => u.id === v.userId) && v.status === 'approved'); 
+    
     const monthCounts = Array(12).fill(0);
     deptVacations.forEach(v => { const start = new Date(v.startDate); monthCounts[start.getMonth()]++; });
     const maxMonthIndex = monthCounts.indexOf(Math.max(...monthCounts));
-    const peakMonth = new Date(2026, maxMonthIndex).toLocaleString('ru-RU', { month: 'long' });
+    const peakMonth = new Date(CURRENT_YEAR, maxMonthIndex).toLocaleString('ru-RU', { month: 'long' });
+    
     const usersWithVacation = new Set(deptVacations.map(v => v.userId));
     const burnoutRiskUsers = deptUsers.filter(u => !usersWithVacation.has(u.id));
     const totalUsers = deptUsers.length;
-    const totalDaysPlanned = deptVacations.reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
+    const totalDaysPlanned = deptVacations.reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate, holidays), 0);
+
     return (
         <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center gap-4"><button onClick={onBack} className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition-colors bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm"><ArrowLeft className="w-4 h-4" /> Назад к графику</button><h2 className="text-2xl font-bold text-gray-800">Аналитика отдела "{department}"</h2></div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Всего сотрудников</h3><Users className="w-5 h-5 text-emerald-500" /></div><div className="text-3xl font-bold text-gray-800">{totalUsers}</div></div><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Самый нагруженный месяц</h3><TrendingUp className="w-5 h-5 text-amber-500" /></div><div className="text-3xl font-bold text-gray-800 capitalize">{peakMonth}</div></div><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"><div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Использовано дней (Согл.)</h3><PieChart className="w-5 h-5 text-blue-500" /></div><div className="text-3xl font-bold text-gray-800">{totalDaysPlanned}</div></div></div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"><h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-red-500" />Зона внимания: Риск выгорания</h3>{burnoutRiskUsers.length > 0 ? (<div className="bg-red-50 border border-red-100 rounded-lg p-4"><p className="text-sm text-red-800 mb-2">Следующие сотрудники еще не запланировали отпуск в 2026 году:</p><div className="flex flex-wrap gap-2">{burnoutRiskUsers.map(u => (<span key={u._docId || u.id} className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-full text-sm border border-red-200 text-gray-700"><div className="w-5 h-5 rounded-full bg-red-100 text-[10px] flex items-center justify-center font-bold text-red-600">{u.avatar}</div>{u.name}</span>))}</div></div>) : (<div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-center gap-2 text-green-700"><CheckCircle className="w-5 h-5" />Все сотрудники отдела запланировали отдых.</div>)}</div>
+            <div className="flex items-center gap-4">
+                <button onClick={onBack} className="flex items-center gap-2 text-gray-600 hover:text-blue-600 transition-colors bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
+                    <ArrowLeft className="w-4 h-4" /> Назад к графику
+                </button>
+                <h2 className="text-2xl font-bold text-gray-800">Аналитика отдела "{department}"</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Всего сотрудников</h3><Users className="w-5 h-5 text-emerald-500" /></div>
+                    <div className="text-3xl font-bold text-gray-800">{totalUsers}</div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Самый нагруженный месяц</h3><TrendingUp className="w-5 h-5 text-amber-500" /></div>
+                    <div className="text-3xl font-bold text-gray-800 capitalize">{peakMonth}</div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex items-center justify-between mb-4"><h3 className="text-gray-500 font-medium text-sm">Использовано дней (Согл.)</h3><PieChart className="w-5 h-5 text-blue-500" /></div>
+                    <div className="text-3xl font-bold text-gray-800">{totalDaysPlanned}</div>
+                </div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-red-500" />Зона внимания: Риск выгорания</h3>
+                {burnoutRiskUsers.length > 0 ? (
+                    <div className="bg-red-50 border border-red-100 rounded-lg p-4">
+                        <p className="text-sm text-red-800 mb-2">Следующие сотрудники еще не запланировали отпуск в {CURRENT_YEAR} году:</p>
+                        <div className="flex flex-wrap gap-2">
+                            {burnoutRiskUsers.map(u => (
+                                <span key={u._docId || u.id} className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-full text-sm border border-red-200 text-gray-700">
+                                    <div className="w-5 h-5 rounded-full bg-red-100 text-[10px] flex items-center justify-center font-bold text-red-600">{u.avatar}</div>
+                                    {u.name}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-center gap-2 text-green-700">
+                        <CheckCircle className="w-5 h-5" />Все сотрудники отдела запланировали отдых.
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
 
-const AdminStats = ({ users, vacations }) => {
+const AdminStats = () => {
+    const { users, vacations, holidays } = useAppContext();
     const totalUsers = users.filter(u => u.role !== 'admin').length;
-    const totalVacationDays = vacations.filter(v => v.status === 'approved').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate), 0);
+    const totalVacationDays = vacations.filter(v => v.status === 'approved').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate, holidays), 0);
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center"><div><div className="text-gray-500 text-sm">Сотрудников</div><div className="text-3xl font-bold">{totalUsers}</div></div><Users className="w-8 h-8 text-blue-500 opacity-20"/></div>
@@ -653,18 +972,17 @@ const AdminStats = ({ users, vacations }) => {
     );
 };
 
-// Новый компонент для управления праздничными днями
 const HolidayManagement = () => {
+    const { holidays } = useAppContext();
     const [inputText, setInputText] = useState('');
     const [parsed, setParsed] = useState([]);
     const [holidayToDelete, setHolidayToDelete] = useState(null);
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
 
     const parseHolidays = (text) => {
         const monthMap = { января: '01', февраля: '02', марта: '03', апреля: '04', мая: '05', июня: '06', июля: '07', августа: '08', сентября: '09', октября: '10', ноября: '11', декабря: '12' };
         const holidaysSet = new Set();
         
-        // Парсинг текстовых форматов (например: "1, 2 и 8 января")
         const textRegex = /((?:\d{1,2}[,\sи]*)+)(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/gi;
         let match;
         while ((match = textRegex.exec(text)) !== null) {
@@ -674,13 +992,10 @@ const HolidayManagement = () => {
             
             const days = daysStr.match(/\d{1,2}/g);
             if (days && monthNum) {
-                days.forEach(d => {
-                    holidaysSet.add(`${String(d).padStart(2, '0')}-${monthNum}`);
-                });
+                days.forEach(d => { holidaysSet.add(`${String(d).padStart(2, '0')}-${monthNum}`); });
             }
         }
 
-        // Парсинг числовых форматов (например: "09.01" или "9.1")
         const numRegex = /\b(\d{1,2})\.(\d{1,2})\b/g;
         while ((match = numRegex.exec(text)) !== null) {
             const day = parseInt(match[1], 10);
@@ -695,7 +1010,7 @@ const HolidayManagement = () => {
     };
 
     const handleSave = async () => {
-        const currentYearHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
+        const currentYearHolidays = holidays[selectedYear] || [];
         const combined = Array.from(new Set([...currentYearHolidays, ...parsed])).sort();
         
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), { 
@@ -708,7 +1023,7 @@ const HolidayManagement = () => {
 
     const confirmDeleteHoliday = async () => {
         if (!holidayToDelete) return;
-        const currentYearHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
+        const currentYearHolidays = holidays[selectedYear] || [];
         const updated = currentYearHolidays.filter(d => d !== holidayToDelete);
         
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), { 
@@ -718,7 +1033,7 @@ const HolidayManagement = () => {
         setHolidayToDelete(null);
     };
 
-    const displayedHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
+    const displayedHolidays = holidays[selectedYear] || [];
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
@@ -731,7 +1046,7 @@ const HolidayManagement = () => {
                         onChange={(e) => setSelectedYear(Number(e.target.value))}
                         className="px-2 py-1 border rounded-lg outline-none focus:border-blue-500 text-sm bg-gray-50"
                     >
-                        {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y}</option>)}
+                        {[CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1, CURRENT_YEAR + 2, CURRENT_YEAR + 3].map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                 </div>
             </div>
@@ -782,7 +1097,8 @@ const HolidayManagement = () => {
     );
 };
 
-const DepartmentManagement = ({ departments, setDepartments, users, setUsers, deptDocs }) => {
+const DepartmentManagement = ({ deptDocs }) => {
+    const { departments, users } = useAppContext();
     const [newDept, setNewDept] = useState('');
     const [editingDept, setEditingDept] = useState(null);
     const [editValue, setEditValue] = useState('');
@@ -793,11 +1109,41 @@ const DepartmentManagement = ({ departments, setDepartments, users, setUsers, de
 
     const handleAdd = async (e) => { e.preventDefault(); if (newDept && !departments.includes(newDept)) { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'departments'), { name: newDept }); setNewDept(''); }};
     const startEdit = (dept) => { setEditingDept(dept); setEditValue(dept); };
-    const saveEdit = async () => { if (editValue && !departments.includes(editValue)) { const deptDoc = deptDocs.find(d => d.name === editingDept); if (deptDoc) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id), { name: editValue }); const usersToUpdate = users.filter(u => u.department === editingDept); for (const u of usersToUpdate) { if (u._docId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId), { department: editValue }); } setEditingDept(null); } else { setEditingDept(null); }};
+    
+    const saveEdit = async () => { 
+        if (editValue && !departments.includes(editValue)) { 
+            const deptDoc = deptDocs.find(d => d.name === editingDept); 
+            if (deptDoc) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id), { name: editValue }); 
+            const usersToUpdate = users.filter(u => u.department === editingDept); 
+            for (const u of usersToUpdate) { 
+                if (u._docId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId), { department: editValue }); 
+            } 
+        }
+        setEditingDept(null); 
+    };
+    
     const attemptDelete = (dept) => { const usersInDept = users.filter(u => u.department === dept).length; if (usersInDept > 0) { setTargetDept(''); setMoveModal({ deptToDelete: dept, usersCount: usersInDept }); } else { setConfirmDelete({ dept }); }};
     const confirmDeleteDept = async () => { const deptDoc = deptDocs.find(d => d.name === confirmDelete.dept); if (deptDoc) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id)); setConfirmDelete(null); };
-    const confirmMoveAndDelete = async () => { const deptToDelete = moveModal.deptToDelete; const newDepartment = targetDept || 'Без отдела'; const usersToMove = users.filter(u => u.department === deptToDelete); for (const u of usersToMove) { if (u._docId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId), { department: newDepartment }); } const deptDoc = deptDocs.find(d => d.name === deptToDelete); if (deptDoc) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id)); setMoveModal(null); };
-    const handleDeleteAllDepartments = async () => { const batch = writeBatch(db); deptDocs.forEach(d => { const ref = doc(db, 'artifacts', appId, 'public', 'data', 'departments', d.id); batch.delete(ref); }); users.forEach(u => { if(u._docId) { const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId); batch.update(ref, { department: 'Без отдела' }); } }); await batch.commit(); setConfirmDeleteAll(false); };
+    
+    const confirmMoveAndDelete = async () => { 
+        const deptToDelete = moveModal.deptToDelete; 
+        const newDepartment = targetDept || 'Без отдела'; 
+        const usersToMove = users.filter(u => u.department === deptToDelete); 
+        for (const u of usersToMove) { 
+            if (u._docId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId), { department: newDepartment }); 
+        } 
+        const deptDoc = deptDocs.find(d => d.name === deptToDelete); 
+        if (deptDoc) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id)); 
+        setMoveModal(null); 
+    };
+    
+    const handleDeleteAllDepartments = async () => { 
+        const batch = writeBatch(db); 
+        deptDocs.forEach(d => { const ref = doc(db, 'artifacts', appId, 'public', 'data', 'departments', d.id); batch.delete(ref); }); 
+        users.forEach(u => { if(u._docId) { const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId); batch.update(ref, { department: 'Без отдела' }); } }); 
+        await batch.commit(); 
+        setConfirmDeleteAll(false); 
+    };
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
@@ -828,15 +1174,16 @@ const DepartmentManagement = ({ departments, setDepartments, users, setUsers, de
             
             <ConfirmModal isOpen={!!confirmDelete} title="Удаление отдела" message={`Вы уверены, что хотите удалить отдел "${confirmDelete?.dept}"?`} onConfirm={confirmDeleteDept} onCancel={() => setConfirmDelete(null)} />
             <ConfirmModal isOpen={confirmDeleteAll} title="Удаление ВСЕХ отделов" message="ВНИМАНИЕ! Это действие необратимо." confirmText="Удалить всё" onConfirm={handleDeleteAllDepartments} onCancel={() => setConfirmDeleteAll(false)} />
-            {moveModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200"><h4 className="font-bold text-gray-800 text-lg mb-2">Удаление отдела</h4><p className="text-sm text-gray-500 mb-4 text-center">Куда перевести <b>{moveModal.usersCount}</b> сотрудников?</p><select value={targetDept} onChange={(e) => setTargetDept(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm bg-white"><option value="">-- Выберите новый отдел --</option><option value="">Без отдела</option>{departments.filter(d => d !== moveModal.deptToDelete).map((d, i) => (<option key={`m-${i}`} value={d}>{d}</option>))}</select><div className="flex gap-3"><button onClick={() => setMoveModal(null)} className="flex-1 py-2 bg-gray-100 rounded">Отмена</button><button onClick={confirmMoveAndDelete} className="flex-1 py-2 bg-indigo-600 text-white rounded">Перенести</button></div></div></div>)}
+            {moveModal && (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200"><h4 className="font-bold text-gray-800 text-lg mb-2">Удаление отдела</h4><p className="text-sm text-gray-500 mb-4 text-center">Куда перевести <b>{moveModal.usersCount}</b> сотрудников?</p><select value={targetDept} onChange={(e) => setTargetDept(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm bg-white"><option value="">-- Выберите новый отдел --</option><option value="Без отдела">Без отдела</option>{departments.filter(d => d !== moveModal.deptToDelete).map((d, i) => (<option key={`m-${i}`} value={d}>{d}</option>))}</select><div className="flex gap-3"><button onClick={() => setMoveModal(null)} className="flex-1 py-2 bg-gray-100 rounded">Отмена</button><button onClick={confirmMoveAndDelete} className="flex-1 py-2 bg-indigo-600 text-white rounded">Перенести</button></div></div></div>)}
         </div>
     );
 };
 
-const UserManagement = ({ users, setUsers, departments, vacations }) => {
+const UserManagement = () => {
+    const { users, departments, vacations, holidays } = useAppContext();
     const [isAdding, setIsAdding] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({ name: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
+    const [formData, setFormData] = useState({ name: '', email: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
     const fileInputRef = useRef(null);
     const [confirmDelete, setConfirmDelete] = useState(null); 
     const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
@@ -845,13 +1192,50 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
     const [bulkModal, setBulkModal] = useState(null); 
     const [bulkValue, setBulkValue] = useState('');
 
-    const resetForm = () => { setFormData({ name: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' }); setEditingUser(null); setIsAdding(false); };
+    const resetForm = () => { setFormData({ name: '', email: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' }); setEditingUser(null); setIsAdding(false); };
     const handleEdit = (user) => { setEditingUser(user); setFormData({ ...user }); setIsAdding(true); };
     const handleDelete = async () => { if (confirmDelete && confirmDelete._docId) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', confirmDelete._docId)); setConfirmDelete(null); }};
     const handleSubmit = async (e) => { e.preventDefault(); const avatar = formData.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); if (editingUser && editingUser._docId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', editingUser._docId), { ...formData, avatar }); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'users'), { ...formData, id: Date.now(), avatar }); } resetForm(); };
     const handleDeleteAllUsers = async () => { const batch = writeBatch(db); users.filter(u => u.role !== 'admin').forEach(u => { if (u._docId) { batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId)); } }); await batch.commit(); setConfirmDeleteAll(false); };
     const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager/ceo),Дата найма (YYYY-MM-DD)\nИван Петров,IT Отдел,employee,2024-01-15"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
-    const handleExportSchedule = () => { let csvContent = ",,Остаток отпуска на 31.12.2025,"; FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); csvContent += "Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.2026\n"; csvContent += ",,,"; FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); csvContent += ",,\n"; users.filter(u => u.role !== 'admin').forEach(user => { const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); let row = `${user.id},${user.name},${user.carryOverDays},`; let totalUsed = 0; for (let i = 0; i < 12; i++) { const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === 2026; }); if (vac) { const days = countBillableDays(vac.startDate, vac.endDate); totalUsed += days; row += `${vac.startDate},${vac.endDate},${days},согласовано,`; } else { row += ",,,,"; } } const remaining = totalAllowance - totalUsed; row += `${totalUsed},${remaining}\n`; csvContent += row; }); const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'Vacation_Schedule_2026.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
+    
+    const handleExportSchedule = () => { 
+        let csvContent = `,,Остаток отпуска на 31.12.${CURRENT_YEAR - 1},`; 
+        FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); 
+        csvContent += `Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.${CURRENT_YEAR}\n`; 
+        csvContent += ",,,"; 
+        FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); 
+        csvContent += ",,\n"; 
+        
+        users.filter(u => u.role !== 'admin').forEach(user => { 
+            const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); 
+            const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); 
+            let row = `${user.id},${user.name},${user.carryOverDays},`; 
+            let totalUsed = 0; 
+            
+            for (let i = 0; i < 12; i++) { 
+                const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === CURRENT_YEAR; }); 
+                if (vac) { 
+                    const days = countBillableDays(vac.startDate, vac.endDate, holidays); 
+                    totalUsed += days; 
+                    row += `${vac.startDate},${vac.endDate},${days},согласовано,`; 
+                } else { 
+                    row += ",,,,"; 
+                } 
+            } 
+            const remaining = totalAllowance - totalUsed; 
+            row += `${totalUsed},${remaining}\n`; 
+            csvContent += row; 
+        }); 
+        
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
+        const link = document.createElement('a'); 
+        link.href = URL.createObjectURL(blob); 
+        link.setAttribute('download', `Vacation_Schedule_${CURRENT_YEAR}.csv`); 
+        document.body.appendChild(link); 
+        link.click(); 
+        document.body.removeChild(link); 
+    };
     
     const handleFileUpload = (e) => { 
         const file = e.target.files[0]; 
@@ -933,6 +1317,10 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
                             <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500" />
                         </div>
                         <div className="flex flex-col">
+                            <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Email (для входа)</label>
+                            <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="user@example.com" />
+                        </div>
+                        <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Отдел</label>
                             <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">{departments.map((d, i) => <option key={`opt-${i}`} value={d}>{d}</option>)}</select>
                         </div>
@@ -973,10 +1361,13 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
                 </div>
             )}
             
-            <div className="overflow-auto max-h-96"><table className="w-full text-left text-sm"><thead className="bg-gray-50 sticky top-0"><tr><th className="p-3 w-8"><button onClick={toggleSelectAll} className="text-gray-400 hover:text-indigo-600">{allSelected ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5" />}</button></th><th>ФИО</th><th>Отдел</th><th>Квота / Остаток</th><th></th></tr></thead><tbody>
+            <div className="overflow-auto max-h-96"><table className="w-full text-left text-sm"><thead className="bg-gray-50 sticky top-0"><tr><th className="p-3 w-8"><button onClick={toggleSelectAll} className="text-gray-400 hover:text-indigo-600">{allSelected ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5" />}</button></th><th>ФИО / Email</th><th>Отдел</th><th>Квота / Остаток</th><th></th></tr></thead><tbody>
                 {users.filter(u=>u.role!=='admin').map(u=>(<tr key={u._docId || u.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="p-3"><button onClick={()=>toggleSelectUser(u.id)} className="text-gray-300 hover:text-indigo-500">{selectedIds.includes(u.id)?<CheckSquare className="w-5 h-5 text-indigo-600"/>:<Square className="w-5 h-5 text-gray-300"/>}</button></td>
-                    <td className="p-3 font-medium text-gray-800">{u.name} <span className="text-xs text-gray-400">({u.role})</span></td>
+                    <td className="p-3 font-medium text-gray-800">
+                        {u.name} <span className="text-xs text-gray-400">({u.role})</span>
+                        <div className="text-[10px] text-gray-500 font-normal">{u.email || 'Нет email'}</div>
+                    </td>
                     <td className="p-3 text-gray-500">{u.department}</td>
                     <td className="p-3 text-center"><span className="font-bold text-gray-800">{u.yearlyAllowance}</span> / <span className="text-green-600">+{u.carryOverDays}</span></td>
                     <td className="p-3 text-right"><button onClick={() => handleEdit(u)} className="text-blue-500 p-1 hover:bg-blue-50 rounded"><Pencil className="w-3 h-3"/></button><button onClick={() => setConfirmDelete(u)} className="text-red-400 p-1 hover:bg-red-50 rounded"><Trash2 className="w-3 h-3"/></button></td>
@@ -1014,16 +1405,17 @@ const UserManagement = ({ users, setUsers, departments, vacations }) => {
     );
 };
 
-const LoginScreen = ({ users, onSelectUser }) => {
+const LoginScreen = ({ onSelectUser }) => {
+    const { users } = useAppContext();
     const [selectedUserId, setSelectedUserId] = useState(null);
     const [passwordInput, setPasswordInput] = useState('');
     const [error, setError] = useState('');
     const [isAdminLogin, setIsAdminLogin] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isSocialLoading, setIsSocialLoading] = useState(false);
 
     const selectedUser = users.find(u => u.id === selectedUserId);
     
-    // Filter users based on search and role
     const filteredUsers = users.filter(u => 
         u.role !== 'admin' && 
         u.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -1041,7 +1433,59 @@ const LoginScreen = ({ users, onSelectUser }) => {
         }
     };
 
-    const handleBack = () => { setSelectedUserId(null); setPasswordInput(''); setError(''); setIsAdminLogin(false); setSearchTerm(''); };
+    const handleSocialLogin = async (providerType) => {
+        if (isSocialLoading) return;
+        try {
+            setIsSocialLoading(true);
+            setError('');
+            
+            // Получаем инстанс auth
+            const authInstance = getAuth();
+            
+            const provider = providerType === 'google' ? new GoogleAuthProvider() : new OAuthProvider('yandex.com');
+            const result = await signInWithPopup(authInstance, provider);
+            const userEmail = result.user?.email;
+            
+            if (!userEmail) {
+                setError('Не удалось получить email от провайдера');
+                return;
+            }
+
+            const matchedUser = users.find(u => u.email && u.email.toLowerCase() === userEmail.toLowerCase());
+            
+            if (matchedUser) {
+                onSelectUser(matchedUser);
+            } else {
+                // Если пользователя нет в базе - немедленно разлогиниваем его из Firebase
+                await signOut(authInstance);
+                // И возвращаем анонимную сессию, чтобы экран логина продолжал получать список пользователей
+                await signInAnonymously(authInstance);
+                setError(`Доступ запрещен. Сотрудник с email ${userEmail} не добавлен администратором.`);
+            }
+        } catch (err) {
+            console.error('Auth error:', err);
+            const errStr = err.toString();
+            // Обработка заблокированных всплывающих окон
+            if (err.code === 'auth/popup-blocked' || errStr.includes('popup-blocked')) {
+                setError('Браузер или текущая среда заблокировали всплывающее окно. Пожалуйста, выберите сотрудника из списка выше для быстрого входа.');
+            } else if (err.code === 'auth/cancelled-popup-request' || errStr.includes('cancelled-popup-request') || errStr.includes('Pending promise was never set')) {
+                setError('Окно авторизации было закрыто или заблокировано. Пожалуйста, используйте вход через список.');
+            } else if (err.code !== 'auth/popup-closed-by-user') {
+                setError(`Ошибка авторизации: ${err.message}`);
+            }
+        } finally {
+            setIsSocialLoading(false);
+        }
+    };
+
+    const handleBack = () => { 
+        setSelectedUserId(null); 
+        setPasswordInput(''); 
+        setError(''); 
+        setIsAdminLogin(false); 
+        setSearchTerm(''); 
+        setIsSocialLoading(false);
+    };
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -1073,6 +1517,24 @@ const LoginScreen = ({ users, onSelectUser }) => {
                                 </button>
                             ))}
                         </div>
+
+                        <div className="relative flex items-center py-2 mt-4 mb-2">
+                            <div className="flex-grow border-t border-gray-200"></div>
+                            <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">быстрый вход</span>
+                            <div className="flex-grow border-t border-gray-200"></div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('google')} className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm disabled:opacity-50">
+                                {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : <svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>}
+                                Google
+                            </button>
+                            <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('yandex')} className="flex-1 flex items-center justify-center gap-2 bg-[#FFCC00] text-black font-medium py-2 px-4 rounded-lg hover:bg-[#F2C100] transition-colors text-sm shadow-sm disabled:opacity-50">
+                                {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.03 1.758c1.332 0 2.457.218 3.376.654.93.424 1.545 1.085 1.848 1.98.303.88.455 2.03.455 3.442 0 1.624-.26 3.006-.782 4.145-.51 1.14-1.2 2.134-2.067 2.982L10.363 21.65h-3.41l6.545-6.75c-1.357-.363-2.357-1.024-3-1.98-.63-1-1.006-2.26-1.127-3.775H6.55v-2.36h2.788c.11-1.393.51-2.5 1.2-3.32.703-.824 1.703-1.236 3-1.236h.5v-2.22c0-.363-.122-.654-.364-.872-.23-.23-.62-.34-1.163-.34h-5.95V1.758h7.47z" fill="currentColor"/></svg>}
+                                Яндекс
+                            </button>
+                        </div>
+                        {error && <p className="mt-2 text-center text-sm text-red-600">{error}</p>}
                     </div>
                 ) : (
                     <form onSubmit={handleLogin} className="animate-fadeIn">
@@ -1080,7 +1542,24 @@ const LoginScreen = ({ users, onSelectUser }) => {
                         {!isAdminLogin && <div className="flex items-center gap-3 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100"><div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 text-lg">{selectedUser.avatar}</div><div><div className="font-bold text-gray-800">{selectedUser.name}</div><div className="text-xs text-gray-500">{selectedUser.department}</div></div></div>}
                         {isAdminLogin && (<div className="mb-6 bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center"><p className="text-sm text-indigo-800 font-medium">Введите пароль администратора</p></div>)}
                         <div className="mb-4"><label className="block text-sm font-medium text-gray-700 mb-1">Пароль</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400" /></div><input type="password" autoFocus value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setError(''); }} className={`block w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${error ? 'border-red-300' : 'border-gray-300'}`} placeholder="Введите пароль" /></div>{error && <p className="mt-1 text-sm text-red-600">{error}</p>}</div>
-                        <button className={`w-full text-white font-bold py-2 px-4 rounded-lg transition-colors ${isAdminLogin ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Войти</button>
+                        <button className={`w-full text-white font-bold py-2 px-4 rounded-lg transition-colors mb-4 ${isAdminLogin ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Войти</button>
+                        
+                        <div className="relative flex items-center py-2 mb-4">
+                            <div className="flex-grow border-t border-gray-200"></div>
+                            <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">или войти через</span>
+                            <div className="flex-grow border-t border-gray-200"></div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('google')} className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm disabled:opacity-50">
+                                {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : <svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>}
+                                Google
+                            </button>
+                            <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('yandex')} className="flex-1 flex items-center justify-center gap-2 bg-[#FFCC00] text-black font-medium py-2 px-4 rounded-lg hover:bg-[#F2C100] transition-colors text-sm shadow-sm disabled:opacity-50">
+                                {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.03 1.758c1.332 0 2.457.218 3.376.654.93.424 1.545 1.085 1.848 1.98.303.88.455 2.03.455 3.442 0 1.624-.26 3.006-.782 4.145-.51 1.14-1.2 2.134-2.067 2.982L10.363 21.65h-3.41l6.545-6.75c-1.357-.363-2.357-1.024-3-1.98-.63-1-1.006-2.26-1.127-3.775H6.55v-2.36h2.788c.11-1.393.51-2.5 1.2-3.32.703-.824 1.703-1.236 3-1.236h.5v-2.22c0-.363-.122-.654-.364-.872-.23-.23-.62-.34-1.163-.34h-5.95V1.758h7.47z" fill="currentColor"/></svg>}
+                                Яндекс
+                            </button>
+                        </div>
                     </form>
                 )}
             </div>
@@ -1088,14 +1567,74 @@ const LoginScreen = ({ users, onSelectUser }) => {
     );
 };
 
+
+// --- MAIN APP WRAPPER & PROVIDER ---
 const App = () => {
+    const [firebaseUser, setFirebaseUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+    
+    // Global State
     const [currentUser, setCurrentUser] = useState(null);
     const [users, setUsers] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [vacations, setVacations] = useState([]);
     const [deptDocs, setDeptDocs] = useState([]);
-    const [firebaseUser, setFirebaseUser] = useState(null);
-    const [holidaysRevision, setHolidaysRevision] = useState(0);
+    const [holidays, setHolidays] = useState({ ...DEFAULT_HOLIDAYS });
+    
+    // Calendar UI State
+    const [calendarDate, setCalendarDate] = useState(new Date(CURRENT_YEAR, 0, 1)); 
+    const [viewMode, setViewMode] = useState('month');
+    const [showManagerStats, setShowManagerStats] = useState(false);
+    const [deleteModal, setDeleteModal] = useState(null);
+
+    // Логика автоматической отправки Email-уведомлений за 7 дней
+    useEffect(() => {
+        if (!firebaseUser || !vacations.length || !users.length) return;
+        
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+
+        vacations.forEach(async (v) => {
+            // Проверяем только согласованные отпуска, о которых еще не уведомляли
+            if (v.status === 'approved' && !v.notified7Days) {
+                const start = new Date(v.startDate);
+                start.setHours(0,0,0,0);
+                
+                // Если до отпуска осталось 7 или менее дней (но он еще не прошел)
+                if (start >= today && start <= nextWeek) {
+                    try {
+                        // 1. Сразу помечаем в БД, чтобы предотвратить дублирование отправок
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId), { notified7Days: true });
+                        
+                        // 2. Имитация отправки Email (в продакшене тут был бы вызов API сервера или EmailJS)
+                        const emp = users.find(u => u.id === v.userId);
+                        const managers = users.filter(u => u.department === emp?.department && u.role === 'manager');
+                        
+                        if (emp) {
+                            console.log(`[EMAIL СЕРВИС] 📧 Кому: Сотруднику (${emp.name}). Тема: Скоро отпуск! Текст: Ваш отпуск начинается ${new Date(v.startDate).toLocaleDateString()}`);
+                        }
+                        managers.forEach(m => {
+                            console.log(`[EMAIL СЕРВИС] 📧 Кому: Руководителю (${m.name}). Тема: Отпуск в отделе. Текст: Сотрудник ${emp?.name} уходит в отпуск ${new Date(v.startDate).toLocaleDateString()}`);
+                        });
+
+                        // 3. Вызов глобального тоста для демонстрации отправки
+                        window.dispatchEvent(new CustomEvent('app-toast', { 
+                            detail: { 
+                                title: '📧 Отправка Email', 
+                                message: `Письма об отпуске (${emp?.name}) успешно отправлены.`,
+                                type: 'email'
+                            } 
+                        }));
+
+                    } catch (err) {
+                        console.error("Ошибка при симуляции отправки email:", err);
+                    }
+                }
+            }
+        });
+    }, [vacations, users, firebaseUser]);
 
     useEffect(() => {
         const initAuth = async () => {
@@ -1104,19 +1643,19 @@ const App = () => {
             } else await signInAnonymously(auth);
         };
         initAuth();
-        return onAuthStateChanged(auth, setFirebaseUser);
+        return onAuthStateChanged(auth, user => {
+            setFirebaseUser(user);
+        });
     }, []);
 
     useEffect(() => {
         if(!firebaseUser) return;
-        const eH = (e) => console.log("DB sync...", e);
+        
+        const eH = (e) => console.error("DB sync error...", e);
         
         const uH = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), s => {
             if (s.exists()) {
-                const data = s.data();
-                for (const key in GLOBAL_HOLIDAYS) delete GLOBAL_HOLIDAYS[key];
-                Object.assign(GLOBAL_HOLIDAYS, DEFAULT_HOLIDAYS, data);
-                setHolidaysRevision(prev => prev + 1);
+                setHolidays(prev => ({ ...DEFAULT_HOLIDAYS, ...s.data() }));
             }
         }, eH);
 
@@ -1125,23 +1664,20 @@ const App = () => {
             if(!d.length) INITIAL_DEPARTMENTS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','departments'),x));
             else { setDeptDocs(d); setDepartments([...new Set(d.map(x=>x.name))]); }
         }, eH);
+
         const uU = onSnapshot(collection(db,'artifacts',appId,'public','data','users'), s => {
             const u = s.docs.map(doc=>({_docId:doc.id,...doc.data()}));
             if(!u.length) INITIAL_USERS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','users'),x));
             else setUsers(u);
+            
+            // Turn off loading once initial users fetch is complete
+            setLoading(false); 
         }, eH);
+
         const uV = onSnapshot(collection(db,'artifacts',appId,'public','data','vacations'), s => setVacations(s.docs.map(d=>({_docId:d.id,...d.data()}))), eH);
         
         return () => { uH(); uD(); uU(); uV(); };
     }, [firebaseUser]);
-
-    const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-    const [calendarDate, setCalendarDate] = useState(new Date(2026, 0, 1)); 
-
-    const [viewMode, setViewMode] = useState('month');
-    const [editingVacation, setEditingVacation] = useState(null);
-    const [showManagerStats, setShowManagerStats] = useState(false);
-    const [deleteModal, setDeleteModal] = useState(null);
 
     const handleNavigation = (dir) => {
         const newDate = new Date(calendarDate);
@@ -1169,80 +1705,89 @@ const App = () => {
         setDeleteModal(null);
     };
 
-    if (!currentUser) return <LoginScreen users={users} onSelectUser={setCurrentUser} />;
+    if (loading) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-500">
+                <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
+                <p>Загрузка данных...</p>
+            </div>
+        );
+    }
+
+    // Context Value definition
+    const contextValue = {
+        currentUser, users, departments, vacations, holidays
+    };
 
     return (
-        <div className="min-h-screen bg-gray-50 text-gray-900 font-sans pb-12">
-            <Header user={currentUser} onLogout={() => setCurrentUser(null)} />
-            <main className="max-w-[1400px] mx-auto px-4 pt-8">
-                {currentUser.role === 'admin' ? (
-                    <div className="space-y-6">
-                        <AdminStats users={users} vacations={vacations} departments={departments} />
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div className="lg:col-span-2"><UserManagement users={users} setUsers={()=>{}} departments={departments} vacations={vacations} /></div>
-                            <div className="lg:col-span-1 space-y-6">
-                                <DepartmentManagement departments={departments} setDepartments={()=>{}} users={users} setUsers={()=>{}} deptDocs={deptDocs} />
-                                <HolidayManagement />
+        <AppContext.Provider value={contextValue}>
+            {!currentUser ? (
+                 <LoginScreen onSelectUser={setCurrentUser} />
+            ) : (
+                <div className="min-h-screen bg-gray-50 text-gray-900 font-sans pb-12 relative overflow-hidden">
+                    <Header onLogout={() => setCurrentUser(null)} />
+                    <main className="max-w-[1400px] mx-auto px-4 pt-8">
+                        {currentUser.role === 'admin' ? (
+                            <div className="space-y-6">
+                                <AdminStats />
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    <div className="lg:col-span-2"><UserManagement /></div>
+                                    <div className="lg:col-span-1 space-y-6">
+                                        <DepartmentManagement deptDocs={deptDocs} />
+                                        <HolidayManagement />
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                ) : (currentUser.role === 'manager' || currentUser.role === 'ceo') ? (
-                    showManagerStats ? <ManagerAnalyticsPage department={currentUser.department} users={users} vacations={vacations} onBack={() => setShowManagerStats(false)} /> :
-                    <div className="space-y-8">
-                         <div className="flex justify-between items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                            <h2 className="text-lg font-bold text-emerald-900">Кабинет: {currentUser.role === 'ceo' ? 'СЕО' : currentUser.department}</h2>
-                            {currentUser.role !== 'ceo' && <button onClick={() => setShowManagerStats(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><BarChart2 className="w-4 h-4"/> Статистика</button>}
-                         </div>
-                         <ManagerApprovals currentUser={currentUser} users={users} vacations={vacations} onUpdateVacation={handleUpdateVacation} />
-                         
-                         <UserView 
-                            user={currentUser} 
-                            users={users} 
-                            vacs={vacations} 
-                            onAdd={handleAddVacation} 
-                            onUpdate={handleUpdateVacation} 
-                            onDel={(id)=>setDeleteModal(id)} 
-                            calendarProps={{
-                                currentMonthDate: calendarDate, 
-                                onPrev: () => handleNavigation(-1), 
-                                onNext: () => handleNavigation(1), 
-                                onPrevYear: () => handleYearNav(-1), 
-                                onNextYear: () => handleYearNav(1), 
-                                viewMode: viewMode, 
-                                setViewMode: setViewMode, 
-                                currentUser
-                            }} 
-                        />
-                    </div>
-                ) : (
-                     <div className="space-y-8">
-                        <UserView 
-                            user={currentUser} 
-                            users={users} 
-                            vacs={vacations} 
-                            onAdd={handleAddVacation} 
-                            onUpdate={handleUpdateVacation} 
-                            onDel={(id)=>setDeleteModal(id)} 
-                            calendarProps={{
-                                currentMonthDate: calendarDate, 
-                                onPrev: () => handleNavigation(-1), 
-                                onNext: () => handleNavigation(1), 
-                                onPrevYear: () => handleYearNav(-1), 
-                                onNextYear: () => handleYearNav(1), 
-                                viewMode: viewMode, 
-                                setViewMode: setViewMode, 
-                                currentUser
-                            }} 
-                        />
-                    </div>
-                )}
-                <ConfirmModal isOpen={!!deleteModal} title="Отмена" message="Удалить отпуск?" onConfirm={confirmDeleteVacation} onCancel={() => setDeleteModal(null)} />
-            </main>
-        </div>
+                        ) : (currentUser.role === 'manager' || currentUser.role === 'ceo') ? (
+                            showManagerStats ? <ManagerAnalyticsPage onBack={() => setShowManagerStats(false)} /> :
+                            <div className="space-y-8">
+                                 <div className="flex justify-between items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                                    <h2 className="text-lg font-bold text-emerald-900">Кабинет: {currentUser.role === 'ceo' ? 'СЕО' : currentUser.department}</h2>
+                                    {currentUser.role !== 'ceo' && <button onClick={() => setShowManagerStats(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><BarChart2 className="w-4 h-4"/> Статистика</button>}
+                                 </div>
+                                 <ManagerApprovals onUpdateVacation={handleUpdateVacation} />
+                                 
+                                 <UserView 
+                                    onAdd={handleAddVacation} 
+                                    onUpdate={handleUpdateVacation} 
+                                    onDel={(id)=>setDeleteModal(id)} 
+                                    calendarProps={{
+                                        currentMonthDate: calendarDate, 
+                                        onPrev: () => handleNavigation(-1), 
+                                        onNext: () => handleNavigation(1), 
+                                        onPrevYear: () => handleYearNav(-1), 
+                                        onNextYear: () => handleYearNav(1), 
+                                        viewMode: viewMode, 
+                                        setViewMode: setViewMode
+                                    }} 
+                                />
+                            </div>
+                        ) : (
+                             <div className="space-y-8">
+                                <UserView 
+                                    onAdd={handleAddVacation} 
+                                    onUpdate={handleUpdateVacation} 
+                                    onDel={(id)=>setDeleteModal(id)} 
+                                    calendarProps={{
+                                        currentMonthDate: calendarDate, 
+                                        onPrev: () => handleNavigation(-1), 
+                                        onNext: () => handleNavigation(1), 
+                                        onPrevYear: () => handleYearNav(-1), 
+                                        onNextYear: () => handleYearNav(1), 
+                                        viewMode: viewMode, 
+                                        setViewMode: setViewMode
+                                    }} 
+                                />
+                            </div>
+                        )}
+                        <ConfirmModal isOpen={!!deleteModal} title="Отмена" message="Удалить отпуск?" onConfirm={confirmDeleteVacation} onCancel={() => setDeleteModal(null)} />
+                    </main>
+                </div>
+            )}
+        </AppContext.Provider>
     );
 };
 
-// Запуск приложения в браузере
 const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(React.createElement(App));
