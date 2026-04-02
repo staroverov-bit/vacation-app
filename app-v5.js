@@ -5,7 +5,7 @@ import {
   Plus, BarChart2, Maximize, LayoutGrid, Trash2, Pencil, Info, PieChart, Check, Settings, 
   UserPlus, X, ClipboardList, Lock, Key, ArrowLeft, ChevronDown, ChevronUp, UserCheck, 
   TrendingUp, AlertCircle, Upload, FileText, AlertOctagon, Download, Clock, XCircle, 
-  Square, CheckSquare, Search, Save, Send, Loader2, Bell
+  Square, CheckSquare, Search, Save, Send, Loader2, Bell, History, RotateCcw
 } from 'https://esm.sh/lucide-react@0.330.0';
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js';
@@ -76,6 +76,7 @@ const countBillableDays = (s, e, holidaysConfig) => {
 
 const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 
+
 // --- COMPONENTS ---
 
 const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = "Удалить", isDanger = true }) => {
@@ -105,9 +106,8 @@ const Header = ({ onLogout }) => {
   const [activePopups, setActivePopups] = useState([]);
   
   const notifRef = useRef(null);
-  const shownNotifsRef = useRef(new Set()); // Чтобы не показывать один и тот же попап дважды за сессию
+  const shownNotifsRef = useRef(new Set()); 
 
-  // Закрытие дропдауна уведомлений при клике вне его области
   useEffect(() => {
       const handleClickOutside = (event) => {
           if (notifRef.current && !notifRef.current.contains(event.target)) {
@@ -118,7 +118,6 @@ const Header = ({ onLogout }) => {
       return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Динамический расчет уведомлений (ближайшие 7 дней)
   const notifications = useMemo(() => {
       if (!user || !vacations || !users) return [];
       const notifs = [];
@@ -127,7 +126,6 @@ const Header = ({ onLogout }) => {
       const nextWeek = new Date(today);
       nextWeek.setDate(today.getDate() + 7);
 
-      // Проверка, является ли сотрудник подчиненным текущего пользователя
       const isSubordinate = (reqUser) => {
           if (!reqUser || reqUser.id === user.id) return false;
           if (user.role === 'ceo') {
@@ -153,7 +151,6 @@ const Header = ({ onLogout }) => {
               const daysText = diffDays === 0 ? 'сегодня' : diffDays === 1 ? 'завтра' : `через ${diffDays} дн.`;
 
               if (v.userId === user.id) {
-                  // Уведомление для самого себя
                   notifs.push({
                       id: `self-${v._docId || v.id}`,
                       title: 'Ваш отпуск',
@@ -162,7 +159,6 @@ const Header = ({ onLogout }) => {
                       date: startDate
                   });
               } else {
-                  // Уведомление для руководителя
                   const reqUser = users.find(u => u.id === v.userId);
                   if (isSubordinate(reqUser)) {
                       notifs.push({
@@ -179,19 +175,13 @@ const Header = ({ onLogout }) => {
       return notifs.sort((a, b) => a.date - b.date);
   }, [user, vacations, users]);
 
-  // Логика вызова всплывающих Popup (Toast)
   useEffect(() => {
       if (notifications.length > 0) {
           const newPopups = notifications.filter(n => !shownNotifsRef.current.has(n.id));
 
           if (newPopups.length > 0) {
-              // Добавляем новые уведомления в Set, чтобы не показывать их снова
               newPopups.forEach(n => shownNotifsRef.current.add(n.id));
-              
-              // Добавляем их в стейт для отображения
               setActivePopups(prev => [...prev, ...newPopups]);
-
-              // Автоматически убираем попапы через 6 секунд
               newPopups.forEach(n => {
                   setTimeout(() => {
                       setActivePopups(prev => prev.filter(p => p.id !== n.id));
@@ -201,7 +191,6 @@ const Header = ({ onLogout }) => {
       }
   }, [notifications]);
 
-  // Прослушивание глобальных событий для системных уведомлений (например, имитация Email)
   useEffect(() => {
       const handleCustomToast = (e) => {
           const newPopup = { id: Date.now() + Math.random().toString(), ...e.detail };
@@ -247,7 +236,6 @@ const Header = ({ onLogout }) => {
         </div>
         <div className="flex items-center gap-4">
           
-          {/* Уведомления */}
           {user.role !== 'admin' && (
               <div className="relative" ref={notifRef}>
                   <button 
@@ -300,7 +288,6 @@ const Header = ({ onLogout }) => {
         </div>
       </div>
 
-      {/* POPUP CONTAINER (Всплывающие уведомления) */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none">
           {activePopups.map(p => (
               <div 
@@ -329,7 +316,6 @@ const Header = ({ onLogout }) => {
 const BalanceCard = () => {
     const { currentUser: user, vacations, holidays } = useAppContext();
     
-    // Memoize calculations to prevent re-running on every small render
     const stats = useMemo(() => {
         const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays);
         let usedDays = 0, pendingDays = 0, draftDays = 0;
@@ -653,7 +639,7 @@ const TeamCalendar = ({ currentMonthDate, onPrev, onNext, viewMode, setViewMode,
 };
 
 const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
-    const { currentUser: user, users, vacations: vacs, holidays } = useAppContext();
+    const { currentUser: user, users, vacations: vacs, holidays, logAction } = useAppContext();
     const [sel, setSel] = useState({ start: null, end: null, count: 0 });
     const [replacementId, setReplacementId] = useState('');
     const [isSendingDrafts, setIsSendingDrafts] = useState(false);
@@ -674,7 +660,25 @@ const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
         else { let s = sel.start, e = date; if (date < s) { s = date; e = sel.start; } const days = countBillableDays(s, e, holidays); setSel({ start: s, end: e, count: days }); }
     };
     
-    const handleAction = (status) => {
+    const triggerMailto = (approver, datesStr) => {
+        if (!approver || !approver.email) return;
+        
+        const subjectText = `Заявка на отпуск от ${user.name}`;
+        const bodyText = `Здравствуйте, ${approver.name}!\r\n\r\nПрошу согласовать мой отпуск на следующие даты:\r\n${datesStr}\r\n\r\nС уважением,\r\n${user.name}`;
+        
+        const subject = encodeURIComponent(subjectText);
+        const body = encodeURIComponent(bodyText);
+        const mailtoUrl = `mailto:${approver.email}?subject=${subject}&body=${body}`;
+        
+        const link = document.createElement('a');
+        link.setAttribute('href', mailtoUrl);
+        link.setAttribute('target', '_blank');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleAction = async (status) => {
         if (!sel.start || !sel.end) return;
         if (sel.count > remainingDays) return alert(`Ошибка: Выбрано ${sel.count} дн., а доступно всего ${remainingDays}`);
         
@@ -690,9 +694,21 @@ const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
             status: finalStatus, 
             replacementId: replacementId ? Number(replacementId) : null 
         };
-        onAdd(payload);
-        setSel({ start: null, end: null, count: 0 });
-        setReplacementId('');
+        
+        try {
+            await onAdd(payload);
+            
+            if (finalStatus === 'pending') {
+                const approver = getApproverForUser(user, users);
+                triggerMailto(approver, `- с ${sel.start.toLocaleDateString()} по ${sel.end.toLocaleDateString()}`);
+            }
+
+            setSel({ start: null, end: null, count: 0 });
+            setReplacementId('');
+        } catch (e) {
+            console.error(e);
+            alert('Произошла ошибка при сохранении заявки.');
+        }
     };
 
     const sendAllDrafts = () => {
@@ -709,12 +725,27 @@ const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
         setIsSendingDrafts(true);
     };
 
-    const confirmSend = () => {
+    const confirmSend = async () => {
         const drafts = vacs.filter(v => v.userId === user.id && v.status === 'draft');
         const finalStatus = (user.role === 'admin' || user.role === 'ceo') ? 'approved' : 'pending';
-        drafts.forEach(d => onUpdate({ ...d, status: finalStatus }));
+        
+        try {
+            await Promise.all(drafts.map(d => onUpdate({ ...d, status: finalStatus })));
+            
+            if (finalStatus === 'pending') {
+                const approver = getApproverForUser(user, users);
+                const datesStr = drafts.map(d => `- с ${new Date(d.startDate).toLocaleDateString()} по ${new Date(d.endDate).toLocaleDateString()}`).join('\r\n');
+                triggerMailto(approver, datesStr);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Произошла ошибка при отправке заявок.');
+        }
+
         setIsSendingDrafts(false);
     };
+
+    const myApprover = getApproverForUser(user, users);
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -782,12 +813,22 @@ const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
                                 <div>
                                     <div className="font-medium text-gray-800">{new Date(v.startDate).toLocaleDateString()} — {new Date(v.endDate).toLocaleDateString()}</div>
                                     <div className="text-xs text-gray-500 mt-1">{countBillableDays(v.startDate, v.endDate, holidays)} дн.</div>
-                                    <div className={`text-[10px] font-bold mt-1 px-2 py-0.5 rounded-full inline-block 
+                                    <div className={`text-[10px] font-bold mt-1 px-2 py-0.5 rounded-full inline-flex items-center gap-1
                                         ${v.status==='approved'?'bg-green-100 text-green-700':
                                           v.status==='rejected'?'bg-red-100 text-red-700':
                                           v.status==='draft'?'bg-gray-100 text-gray-700 border border-gray-200':
                                           'bg-amber-100 text-amber-700'}`}>
                                         {v.status === 'pending' ? 'На согласовании' : v.status === 'approved' ? 'Согласовано' : v.status === 'draft' ? 'Черновик' : 'Отклонено'}
+                                        
+                                        {v.status === 'pending' && myApprover?.email && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); triggerMailto(myApprover, `- с ${new Date(v.startDate).toLocaleDateString()} по ${new Date(v.endDate).toLocaleDateString()}`); }}
+                                                className="ml-1 text-amber-600 hover:text-amber-800 transition-colors bg-amber-200/50 p-1 rounded-full" 
+                                                title={`Напомнить руководителю (${myApprover.name})`}
+                                            >
+                                                <Mail className="w-3 h-3" />
+                                            </button>
+                                        )}
                                     </div>
                                     {v.replacementId && <div className="text-[10px] text-gray-400 mt-1 flex items-center gap-1"><UserCheck className="w-3 h-3"/> Зам: {users.find(u=>u.id===v.replacementId)?.name}</div>}
                                 </div>
@@ -819,7 +860,7 @@ const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
 };
 
 const ManagerApprovals = ({ onUpdateVacation }) => {
-    const { currentUser, users, vacations, holidays } = useAppContext();
+    const { currentUser, users, vacations, holidays, logAction } = useAppContext();
     const [rejectModal, setRejectModal] = useState(null);
 
     const pendingRequests = useMemo(() => {
@@ -840,11 +881,15 @@ const ManagerApprovals = ({ onUpdateVacation }) => {
         }).map(v => ({ ...v, user: users.find(u => u.id === v.userId) }));
     }, [vacations, users, currentUser]);
 
-    const handleApprove = (vacation) => onUpdateVacation({ ...vacation, status: 'approved' });
+    const handleApprove = (vacation) => {
+        onUpdateVacation({ ...vacation, status: 'approved' });
+        logAction('APPROVE_VACATION', `Согласован отпуск сотрудника ${vacation.user.name}`, vacation.id, vacation, { ...vacation, status: 'approved' });
+    };
     
     const confirmReject = () => { 
         if (rejectModal) { 
             onUpdateVacation({ ...rejectModal, status: 'rejected' }); 
+            logAction('REJECT_VACATION', `Отклонен отпуск сотрудника ${rejectModal.user?.name}`, rejectModal.id, rejectModal, { ...rejectModal, status: 'rejected' });
             setRejectModal(null); 
         } 
     };
@@ -972,8 +1017,129 @@ const AdminStats = () => {
     );
 };
 
+const AuditLogViewer = () => {
+    const { auditLogs, logAction } = useAppContext();
+    const [restoreModal, setRestoreModal] = useState(null);
+
+    const handleRestoreClick = (log) => {
+        setRestoreModal(log);
+    };
+
+    const confirmRestore = async () => {
+        const log = restoreModal;
+        if (!log) return;
+
+        try {
+            let collectionName = '';
+            let typeName = '';
+
+            if (log.type.includes('USER')) { collectionName = 'users'; typeName = 'RESTORE_USER'; }
+            else if (log.type.includes('VACATION')) { collectionName = 'vacations'; typeName = 'RESTORE_VACATION'; }
+            else if (log.type.includes('DEPT')) { collectionName = 'departments'; typeName = 'RESTORE_DEPT'; }
+            else {
+                throw new Error("Этот тип действий не поддерживает автоматическое восстановление.");
+            }
+
+            if (log.type.includes('ADD') || log.type.includes('CREATE')) {
+                const docId = log.newData?._docId || log.targetId;
+                if (!docId) throw new Error("ID документа не найден.");
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, docId));
+                logAction(typeName, `Отменено добавление: ${log.details}`);
+            } else {
+                if (!log.previousData || !log.previousData._docId) {
+                    throw new Error("Невозможно восстановить: нет данных предыдущего состояния.");
+                }
+                const { _docId, ...dataToRestore } = log.previousData;
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', collectionName, _docId), dataToRestore);
+                logAction(typeName, `Восстановлены данные из лога: ${log.details}`);
+            }
+            
+            window.dispatchEvent(new CustomEvent('app-toast', { detail: { title: 'Успех', message: 'Действие успешно отменено.', type: 'self' } }));
+        } catch (e) {
+            window.dispatchEvent(new CustomEvent('app-toast', { detail: { title: 'Ошибка', message: e.message, type: 'subordinate' } }));
+        } finally {
+            setRestoreModal(null);
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
+            <div className="p-6 border-b border-gray-200 bg-gray-50">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><History className="w-5 h-5 text-gray-500" /> Журнал действий (Бэклог)</h3>
+                <p className="text-xs text-gray-500 mt-1">История изменений системы. Поддерживается возврат (отмена) для удаленных или измененных данных.</p>
+            </div>
+            <div className="overflow-auto max-h-96">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 sticky top-0 shadow-sm z-10">
+                        <tr>
+                            <th className="p-3 w-40 text-gray-600 font-semibold text-xs uppercase">Дата / Время</th>
+                            <th className="p-3 w-48 text-gray-600 font-semibold text-xs uppercase">Пользователь</th>
+                            <th className="p-3 w-40 text-gray-600 font-semibold text-xs uppercase">Тип действия</th>
+                            <th className="p-3 text-gray-600 font-semibold text-xs uppercase">Детали</th>
+                            <th className="p-3 w-24 text-right text-gray-600 font-semibold text-xs uppercase">Откат</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {auditLogs.length === 0 && (
+                            <tr><td colSpan="5" className="p-8 text-center text-gray-400">Журнал пуст</td></tr>
+                        )}
+                        {auditLogs.map(log => {
+                            const date = new Date(log.timestamp);
+                            const isDestructive = log.type.includes('DELETE') || log.type.includes('EDIT') || log.type.includes('REJECT');
+                            const canRestore = (!!log.previousData || log.type.includes('ADD') || log.type.includes('CREATE')) && 
+                                               (log.type.includes('USER') || log.type.includes('DEPT') || log.type.includes('VACATION'));
+                            
+                            return (
+                                <tr key={log._docId} className={`hover:bg-gray-50 transition-colors ${log.reverted ? 'opacity-50' : ''}`}>
+                                    <td className="p-3 text-gray-500 text-xs">
+                                        {date.toLocaleDateString()} <span className="font-medium">{date.toLocaleTimeString()}</span>
+                                    </td>
+                                    <td className="p-3 font-medium text-gray-700">{log.userName}</td>
+                                    <td className="p-3">
+                                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold ${
+                                            log.type.includes('DELETE') ? 'bg-red-100 text-red-700' :
+                                            (log.type.includes('ADD') || log.type.includes('CREATE')) ? 'bg-green-100 text-green-700' :
+                                            log.type.includes('RESTORE') ? 'bg-purple-100 text-purple-700' :
+                                            'bg-blue-100 text-blue-700'
+                                        }`}>
+                                            {log.type}
+                                        </span>
+                                    </td>
+                                    <td className={`p-3 ${isDestructive ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>{log.details}</td>
+                                    <td className="p-3 text-right">
+                                        {log.reverted ? (
+                                            <span className="text-xs text-gray-400 flex items-center justify-end gap-1"><CheckCircle className="w-3 h-3"/> Отменено</span>
+                                        ) : canRestore ? (
+                                            <button 
+                                                onClick={() => handleRestoreClick(log)}
+                                                className="text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded text-xs flex items-center justify-end gap-1 ml-auto transition-colors"
+                                                title="Отменить действие (восстановить старые данные)"
+                                            >
+                                                <RotateCcw className="w-3 h-3" /> Возврат
+                                            </button>
+                                        ) : null}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+            <ConfirmModal 
+                isOpen={!!restoreModal} 
+                title="Отмена действия" 
+                message={restoreModal ? `Вы уверены, что хотите отменить действие:\n"${restoreModal.details}"?` : ''} 
+                confirmText="Отменить действие"
+                isDanger={false}
+                onConfirm={confirmRestore} 
+                onCancel={() => setRestoreModal(null)} 
+            />
+        </div>
+    );
+};
+
 const HolidayManagement = () => {
-    const { holidays } = useAppContext();
+    const { holidays, logAction } = useAppContext();
     const [inputText, setInputText] = useState('');
     const [parsed, setParsed] = useState([]);
     const [holidayToDelete, setHolidayToDelete] = useState(null);
@@ -983,6 +1149,7 @@ const HolidayManagement = () => {
         const monthMap = { января: '01', февраля: '02', марта: '03', апреля: '04', мая: '05', июня: '06', июля: '07', августа: '08', сентября: '09', октября: '10', ноября: '11', декабря: '12' };
         const holidaysSet = new Set();
         
+        // Парсинг текстовых форматов (например: "1, 2 и 8 января")
         const textRegex = /((?:\d{1,2}[,\sи]*)+)(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)/gi;
         let match;
         while ((match = textRegex.exec(text)) !== null) {
@@ -992,10 +1159,13 @@ const HolidayManagement = () => {
             
             const days = daysStr.match(/\d{1,2}/g);
             if (days && monthNum) {
-                days.forEach(d => { holidaysSet.add(`${String(d).padStart(2, '0')}-${monthNum}`); });
+                days.forEach(d => {
+                    holidaysSet.add(`${String(d).padStart(2, '0')}-${monthNum}`);
+                });
             }
         }
 
+        // Парсинг числовых форматов (например: "09.01" или "9.1")
         const numRegex = /\b(\d{1,2})\.(\d{1,2})\b/g;
         while ((match = numRegex.exec(text)) !== null) {
             const day = parseInt(match[1], 10);
@@ -1010,30 +1180,32 @@ const HolidayManagement = () => {
     };
 
     const handleSave = async () => {
-        const currentYearHolidays = holidays[selectedYear] || [];
+        const currentYearHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
         const combined = Array.from(new Set([...currentYearHolidays, ...parsed])).sort();
         
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), { 
             [selectedYear]: combined 
         }, { merge: true });
         
+        logAction('ADD_HOLIDAYS', `Добавлены выходные дни на ${selectedYear} год: ${parsed.join(', ')}`);
         setInputText('');
         setParsed([]);
     };
 
     const confirmDeleteHoliday = async () => {
         if (!holidayToDelete) return;
-        const currentYearHolidays = holidays[selectedYear] || [];
+        const currentYearHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
         const updated = currentYearHolidays.filter(d => d !== holidayToDelete);
         
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), { 
             [selectedYear]: updated 
         }, { merge: true });
         
+        logAction('DELETE_HOLIDAY', `Удален выходной день ${holidayToDelete} из ${selectedYear} года`);
         setHolidayToDelete(null);
     };
 
-    const displayedHolidays = holidays[selectedYear] || [];
+    const displayedHolidays = GLOBAL_HOLIDAYS[selectedYear] || [];
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
@@ -1098,13 +1270,16 @@ const HolidayManagement = () => {
 };
 
 const AuthSettingsManagement = () => {
-    const { authSettings } = useAppContext();
+    const { authSettings, logAction } = useAppContext();
 
     const toggleSetting = async (key) => {
+        const newValue = !authSettings[key];
         await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'auth'), {
             ...authSettings,
-            [key]: !authSettings[key]
+            [key]: newValue
         }, { merge: true });
+        
+        logAction('UPDATE_AUTH', `Изменены настройки входа. ${key} теперь ${newValue ? 'включен' : 'выключен'}`);
     };
 
     return (
@@ -1129,7 +1304,7 @@ const AuthSettingsManagement = () => {
 };
 
 const DepartmentManagement = ({ deptDocs }) => {
-    const { departments, users } = useAppContext();
+    const { departments, users, logAction } = useAppContext();
     const [newDept, setNewDept] = useState('');
     const [editingDept, setEditingDept] = useState(null);
     const [editValue, setEditValue] = useState('');
@@ -1138,13 +1313,24 @@ const DepartmentManagement = ({ deptDocs }) => {
     const [confirmDelete, setConfirmDelete] = useState(null); 
     const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
 
-    const handleAdd = async (e) => { e.preventDefault(); if (newDept && !departments.includes(newDept)) { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'departments'), { name: newDept }); setNewDept(''); }};
+    const handleAdd = async (e) => { 
+        e.preventDefault(); 
+        if (newDept && !departments.includes(newDept)) { 
+            const ref = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'departments'), { name: newDept }); 
+            logAction('ADD_DEPT', `Создан отдел: ${newDept}`, ref.id, null, { name: newDept, _docId: ref.id });
+            setNewDept(''); 
+        }
+    };
+    
     const startEdit = (dept) => { setEditingDept(dept); setEditValue(dept); };
     
     const saveEdit = async () => { 
         if (editValue && !departments.includes(editValue)) { 
             const deptDoc = deptDocs.find(d => d.name === editingDept); 
-            if (deptDoc) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id), { name: editValue }); 
+            if (deptDoc) {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id), { name: editValue }); 
+                logAction('EDIT_DEPT', `Переименован отдел: ${editingDept} -> ${editValue}`, deptDoc.id, deptDoc, { ...deptDoc, name: editValue });
+            }
             const usersToUpdate = users.filter(u => u.department === editingDept); 
             for (const u of usersToUpdate) { 
                 if (u._docId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId), { department: editValue }); 
@@ -1154,7 +1340,15 @@ const DepartmentManagement = ({ deptDocs }) => {
     };
     
     const attemptDelete = (dept) => { const usersInDept = users.filter(u => u.department === dept).length; if (usersInDept > 0) { setTargetDept(''); setMoveModal({ deptToDelete: dept, usersCount: usersInDept }); } else { setConfirmDelete({ dept }); }};
-    const confirmDeleteDept = async () => { const deptDoc = deptDocs.find(d => d.name === confirmDelete.dept); if (deptDoc) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id)); setConfirmDelete(null); };
+    
+    const confirmDeleteDept = async () => { 
+        const deptDoc = deptDocs.find(d => d.name === confirmDelete.dept); 
+        if (deptDoc) {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id)); 
+            logAction('DELETE_DEPT', `Удален отдел: ${deptDoc.name}`, deptDoc.id, deptDoc);
+        }
+        setConfirmDelete(null); 
+    };
     
     const confirmMoveAndDelete = async () => { 
         const deptToDelete = moveModal.deptToDelete; 
@@ -1164,7 +1358,10 @@ const DepartmentManagement = ({ deptDocs }) => {
             if (u._docId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId), { department: newDepartment }); 
         } 
         const deptDoc = deptDocs.find(d => d.name === deptToDelete); 
-        if (deptDoc) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id)); 
+        if (deptDoc) {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'departments', deptDoc.id)); 
+            logAction('DELETE_DEPT_BULK_MOVE', `Удален отдел ${deptDoc.name} с переносом сотрудников в ${newDepartment}`, deptDoc.id, deptDoc);
+        }
         setMoveModal(null); 
     };
     
@@ -1173,6 +1370,7 @@ const DepartmentManagement = ({ deptDocs }) => {
         deptDocs.forEach(d => { const ref = doc(db, 'artifacts', appId, 'public', 'data', 'departments', d.id); batch.delete(ref); }); 
         users.forEach(u => { if(u._docId) { const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId); batch.update(ref, { department: 'Без отдела' }); } }); 
         await batch.commit(); 
+        logAction('DELETE_ALL_DEPTS', `Удалены все отделы`);
         setConfirmDeleteAll(false); 
     };
 
@@ -1211,10 +1409,10 @@ const DepartmentManagement = ({ deptDocs }) => {
 };
 
 const UserManagement = () => {
-    const { users, departments, vacations, holidays } = useAppContext();
+    const { users, departments, vacations, holidays, logAction } = useAppContext();
     const [isAdding, setIsAdding] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({ name: '', email: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
+    const [formData, setFormData] = useState({ name: '', department: departments[0] || '', email: '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
     const fileInputRef = useRef(null);
     const [confirmDelete, setConfirmDelete] = useState(null); 
     const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
@@ -1225,48 +1423,43 @@ const UserManagement = () => {
 
     const resetForm = () => { setFormData({ name: '', email: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' }); setEditingUser(null); setIsAdding(false); };
     const handleEdit = (user) => { setEditingUser(user); setFormData({ ...user }); setIsAdding(true); };
-    const handleDelete = async () => { if (confirmDelete && confirmDelete._docId) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', confirmDelete._docId)); setConfirmDelete(null); }};
-    const handleSubmit = async (e) => { e.preventDefault(); const avatar = formData.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); if (editingUser && editingUser._docId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', editingUser._docId), { ...formData, avatar }); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'users'), { ...formData, id: Date.now(), avatar }); } resetForm(); };
-    const handleDeleteAllUsers = async () => { const batch = writeBatch(db); users.filter(u => u.role !== 'admin').forEach(u => { if (u._docId) { batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId)); } }); await batch.commit(); setConfirmDeleteAll(false); };
-    const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager/ceo),Дата найма (YYYY-MM-DD)\nИван Петров,IT Отдел,employee,2024-01-15"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
     
-    const handleExportSchedule = () => { 
-        let csvContent = `,,Остаток отпуска на 31.12.${CURRENT_YEAR - 1},`; 
-        FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); 
-        csvContent += `Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.${CURRENT_YEAR}\n`; 
-        csvContent += ",,,"; 
-        FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); 
-        csvContent += ",,\n"; 
-        
-        users.filter(u => u.role !== 'admin').forEach(user => { 
-            const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); 
-            const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); 
-            let row = `${user.id},${user.name},${user.carryOverDays},`; 
-            let totalUsed = 0; 
-            
-            for (let i = 0; i < 12; i++) { 
-                const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === CURRENT_YEAR; }); 
-                if (vac) { 
-                    const days = countBillableDays(vac.startDate, vac.endDate, holidays); 
-                    totalUsed += days; 
-                    row += `${vac.startDate},${vac.endDate},${days},согласовано,`; 
-                } else { 
-                    row += ",,,,"; 
-                } 
-            } 
-            const remaining = totalAllowance - totalUsed; 
-            row += `${totalUsed},${remaining}\n`; 
-            csvContent += row; 
-        }); 
-        
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
-        const link = document.createElement('a'); 
-        link.href = URL.createObjectURL(blob); 
-        link.setAttribute('download', `Vacation_Schedule_${CURRENT_YEAR}.csv`); 
-        document.body.appendChild(link); 
-        link.click(); 
-        document.body.removeChild(link); 
+    const handleDelete = async () => { 
+        if (confirmDelete && confirmDelete._docId) { 
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', confirmDelete._docId)); 
+            logAction('DELETE_USER', `Удален сотрудник: ${confirmDelete.name}`, confirmDelete.id, confirmDelete);
+            setConfirmDelete(null); 
+        }
     };
+    
+    const handleSubmit = async (e) => { 
+        e.preventDefault(); 
+        const avatar = formData.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); 
+        if (editingUser && editingUser._docId) { 
+            const oldUser = users.find(u => u._docId === editingUser._docId);
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', editingUser._docId), { ...formData, avatar }); 
+            logAction('EDIT_USER', `Изменены данные сотрудника: ${formData.name}`, editingUser._docId, oldUser, { ...formData, avatar });
+        } else { 
+            const newId = Date.now();
+            const docRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'users'), { ...formData, id: newId, avatar }); 
+            logAction('ADD_USER', `Добавлен сотрудник: ${formData.name}`, docRef.id, null, { ...formData, id: newId, avatar, _docId: docRef.id });
+        } 
+        resetForm(); 
+    };
+
+    const handleDeleteAllUsers = async () => { 
+        const batch = writeBatch(db); 
+        const usersToDelete = users.filter(u => u.role !== 'admin');
+        usersToDelete.forEach(u => { 
+            if (u._docId) { batch.delete(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId)); } 
+        }); 
+        await batch.commit(); 
+        logAction('DELETE_ALL_USERS', `Удалены все сотрудники`);
+        setConfirmDeleteAll(false); 
+    };
+    
+    const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager/ceo),Дата найма (YYYY-MM-DD),Email\nИван Петров,IT Отдел,employee,2024-01-15,ivan@example.com"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
+    const handleExportSchedule = () => { let csvContent = ",,Остаток отпуска на 31.12.2025,"; FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); csvContent += "Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.2026\n"; csvContent += ",,,"; FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); csvContent += ",,\n"; users.filter(u => u.role !== 'admin').forEach(user => { const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); let row = `${user.id},${user.name},${user.carryOverDays},`; let totalUsed = 0; for (let i = 0; i < 12; i++) { const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === 2026; }); if (vac) { const days = countBillableDays(vac.startDate, vac.endDate, holidays); totalUsed += days; row += `${vac.startDate},${vac.endDate},${days},согласовано,`; } else { row += ",,,,"; } } const remaining = totalAllowance - totalUsed; row += `${totalUsed},${remaining}\n`; csvContent += row; }); const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'Vacation_Schedule_2026.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
     
     const handleFileUpload = (e) => { 
         const file = e.target.files[0]; 
@@ -1290,8 +1483,9 @@ const UserManagement = () => {
 
                     const role = parts[2] === 'manager' ? 'manager' : parts[2] === 'ceo' ? 'ceo' : 'employee'; 
                     const date = parts[3] || new Date().toISOString().split('T')[0]; 
+                    const email = parts[4] || ''; 
                     const avatar = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0,2); 
-                    newUsers.push({ id: Date.now() + index, name, department: dept, role, yearlyAllowance: 28, carryOverDays: 0, hireDate: date, password: '123', avatar }); 
+                    newUsers.push({ id: Date.now() + index, name, department: dept, email, role, yearlyAllowance: 28, carryOverDays: 0, hireDate: date, password: '123', avatar }); 
                 } 
             }); 
 
@@ -1303,12 +1497,15 @@ const UserManagement = () => {
                     batch.set(deptRef, { name: deptName });
                 });
 
+                const createdUserIds = [];
                 newUsers.forEach(u => { 
                     const ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'users')); 
+                    createdUserIds.push(ref.id);
                     batch.set(ref, u); 
                 }); 
 
                 await batch.commit(); 
+                logAction('BULK_IMPORT', `Массовый импорт: загружено ${newUsers.length} сотрудников`);
                 setImportInfo({ message: `Успешно загружено ${newUsers.length} сотрудников${newDeptsToCreate.size > 0 ? ` и добавлено ${newDeptsToCreate.size} новых отделов` : ''}`, isError: false }); 
             } else { 
                 setImportInfo({ message: 'Ошибка: Не удалось распознать данные', isError: true }); 
@@ -1323,7 +1520,26 @@ const UserManagement = () => {
     const allSelected = visibleUsers.length > 0 && visibleUsers.every(u => selectedIds.includes(u.id));
     const toggleSelectAll = () => { if (allSelected) setSelectedIds([]); else setSelectedIds(visibleUsers.map(u => u.id)); };
     const toggleSelectUser = (id) => { if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(i => i !== id)); else setSelectedIds([...selectedIds, id]); };
-    const handleBulkSave = async () => { if (bulkValue === '') return; const batch = writeBatch(db); users.forEach(u => { if (selectedIds.includes(u.id) && u._docId) { const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId); if (bulkModal.type === 'department') batch.update(ref, { department: bulkValue }); if (bulkModal.type === 'quota') batch.update(ref, { yearlyAllowance: Number(bulkValue) }); } }); await batch.commit(); setBulkModal(null); setBulkValue(''); setSelectedIds([]); };
+    
+    const handleBulkSave = async () => { 
+        if (bulkValue === '') return; 
+        const batch = writeBatch(db); 
+        const oldUsersData = users.filter(u => selectedIds.includes(u.id));
+        
+        users.forEach(u => { 
+            if (selectedIds.includes(u.id) && u._docId) { 
+                const ref = doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId); 
+                if (bulkModal.type === 'department') batch.update(ref, { department: bulkValue }); 
+                if (bulkModal.type === 'quota') batch.update(ref, { yearlyAllowance: Number(bulkValue) }); 
+            } 
+        }); 
+        
+        await batch.commit(); 
+        logAction('BULK_EDIT', `Массовое изменение для ${selectedIds.length} сотрудников: ${bulkModal.type === 'department' ? 'Смена отдела' : 'Изменение квоты'}`);
+        setBulkModal(null); 
+        setBulkValue(''); 
+        setSelectedIds([]); 
+    };
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative pb-16">
@@ -1349,7 +1565,7 @@ const UserManagement = () => {
                         </div>
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Email (для входа)</label>
-                            <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="user@example.com" />
+                            <input type="email" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500" placeholder="user@company.com" />
                         </div>
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Отдел</label>
@@ -1580,47 +1796,6 @@ const LoginScreen = ({ onSelectUser }) => {
                                 </div>
                             </>
                         )}
-
-                        {!authConfig.password && !authConfig.google && !authConfig.yandex && (
-                            <div className="text-center py-8 text-gray-500 text-sm bg-gray-50 rounded-xl border border-gray-100">
-                                <AlertTriangle className="w-8 h-8 text-orange-400 mx-auto mb-2" />
-                                Все методы входа отключены администратором
-                            </div>
-                        )}
-                        {error && <p className="mt-2 text-center text-sm text-red-600">{error}</p>}
-                    </div>
-                ) : (
-                    <form onSubmit={handleLogin} className="animate-fadeIn">
-                         <button type="button" onClick={handleBack} className="flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"><ArrowLeft className="w-4 h-4 mr-1" /> Назад</button>
-                        {!isAdminLogin && <div className="flex items-center gap-3 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100"><div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-700 text-lg">{selectedUser?.avatar}</div><div><div className="font-bold text-gray-800">{selectedUser?.name}</div><div className="text-xs text-gray-500">{selectedUser?.department}</div></div></div>}
-                        {isAdminLogin && (<div className="mb-6 bg-indigo-50 p-4 rounded-xl border border-indigo-100 text-center"><p className="text-sm text-indigo-800 font-medium">Введите пароль администратора</p></div>)}
-                        <div className="mb-4"><label className="block text-sm font-medium text-gray-700 mb-1">Пароль</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-gray-400" /></div><input type="password" autoFocus value={passwordInput} onChange={(e) => { setPasswordInput(e.target.value); setError(''); }} className={`block w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${error ? 'border-red-300' : 'border-gray-300'}`} placeholder="Введите пароль" /></div>{error && <p className="mt-1 text-sm text-red-600">{error}</p>}</div>
-                        <button className={`w-full text-white font-bold py-2 px-4 rounded-lg transition-colors mb-4 ${isAdminLogin ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Войти</button>
-                        
-                        {!isAdminLogin && (authConfig.google || authConfig.yandex) && (
-                            <>
-                                <div className="relative flex items-center py-2 mb-4">
-                                    <div className="flex-grow border-t border-gray-200"></div>
-                                    <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">или войти через</span>
-                                    <div className="flex-grow border-t border-gray-200"></div>
-                                </div>
-
-                                <div className="flex gap-3">
-                                    {authConfig.google && (
-                                        <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('google')} className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm disabled:opacity-50">
-                                            {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : <svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>}
-                                            Google
-                                        </button>
-                                    )}
-                                    {authConfig.yandex && (
-                                        <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('yandex')} className="flex-1 flex items-center justify-center gap-2 bg-[#FFCC00] text-black font-medium py-2 px-4 rounded-lg hover:bg-[#F2C100] transition-colors text-sm shadow-sm disabled:opacity-50">
-                                            {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.03 1.758c1.332 0 2.457.218 3.376.654.93.424 1.545 1.085 1.848 1.98.303.88.455 2.03.455 3.442 0 1.624-.26 3.006-.782 4.145-.51 1.14-1.2 2.134-2.067 2.982L10.363 21.65h-3.41l6.545-6.75c-1.357-.363-2.357-1.024-3-1.98-.63-1-1.006-2.26-1.127-3.775H6.55v-2.36h2.788c.11-1.393.51-2.5 1.2-3.32.703-.824 1.703-1.236 3-1.236h.5v-2.22c0-.363-.122-.654-.364-.872-.23-.23-.62-.34-1.163-.34h-5.95V1.758h7.47z" fill="currentColor"/></svg>}
-                                            Яндекс
-                                        </button>
-                                    )}
-                                </div>
-                            </>
-                        )}
                     </form>
                 )}
             </div>
@@ -1628,8 +1803,6 @@ const LoginScreen = ({ onSelectUser }) => {
     );
 };
 
-
-// --- MAIN APP WRAPPER & PROVIDER ---
 const App = () => {
     const [firebaseUser, setFirebaseUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -1642,12 +1815,31 @@ const App = () => {
     const [deptDocs, setDeptDocs] = useState([]);
     const [holidays, setHolidays] = useState({ ...DEFAULT_HOLIDAYS });
     const [authSettings, setAuthSettings] = useState(DEFAULT_AUTH_SETTINGS);
+    const [auditLogs, setAuditLogs] = useState([]);
 
     // Calendar UI State
     const [calendarDate, setCalendarDate] = useState(new Date(CURRENT_YEAR, 0, 1)); 
     const [viewMode, setViewMode] = useState('month');
-    const [showManagerStats, setShowManagerStats] = useState(false);
     const [deleteModal, setDeleteModal] = useState(null);
+    const [showManagerStats, setShowManagerStats] = useState(false);
+
+    const logAction = async (type, details, targetId = null, previousData = null, newData = null) => {
+        if (!currentUser && type !== 'SYSTEM') return;
+        try {
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'audit_logs'), {
+                timestamp: Date.now(),
+                userId: currentUser ? currentUser.id : 'system',
+                userName: currentUser ? currentUser.name : 'Система',
+                type,
+                details,
+                targetId,
+                previousData,
+                newData
+            });
+        } catch (e) {
+            console.error("Logging failed", e);
+        }
+    };
 
     // Логика автоматической отправки Email-уведомлений за 7 дней
     useEffect(() => {
@@ -1659,18 +1851,14 @@ const App = () => {
         nextWeek.setDate(today.getDate() + 7);
 
         vacations.forEach(async (v) => {
-            // Проверяем только согласованные отпуска, о которых еще не уведомляли
             if (v.status === 'approved' && !v.notified7Days) {
                 const start = new Date(v.startDate);
                 start.setHours(0,0,0,0);
                 
-                // Если до отпуска осталось 7 или менее дней (но он еще не прошел)
                 if (start >= today && start <= nextWeek) {
                     try {
-                        // 1. Сразу помечаем в БД, чтобы предотвратить дублирование отправок
                         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId), { notified7Days: true });
                         
-                        // 2. Имитация отправки Email (в продакшене тут был бы вызов API сервера или EmailJS)
                         const emp = users.find(u => u.id === v.userId);
                         const managers = users.filter(u => u.department === emp?.department && u.role === 'manager');
                         
@@ -1681,7 +1869,6 @@ const App = () => {
                             console.log(`[EMAIL СЕРВИС] 📧 Кому: Руководителю (${m.name}). Тема: Отпуск в отделе. Текст: Сотрудник ${emp?.name} уходит в отпуск ${new Date(v.startDate).toLocaleDateString()}`);
                         });
 
-                        // 3. Вызов глобального тоста для демонстрации отправки
                         window.dispatchEvent(new CustomEvent('app-toast', { 
                             detail: { 
                                 title: '📧 Отправка Email', 
@@ -1712,12 +1899,13 @@ const App = () => {
 
     useEffect(() => {
         if(!firebaseUser) return;
-        
-        const eH = (e) => console.error("DB sync error...", e);
+        const eH = (e) => console.log("DB sync...", e);
         
         const uH = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), s => {
             if (s.exists()) {
-                setHolidays(prev => ({ ...DEFAULT_HOLIDAYS, ...s.data() }));
+                const data = s.data();
+                for (const key in GLOBAL_HOLIDAYS) delete GLOBAL_HOLIDAYS[key];
+                Object.assign(GLOBAL_HOLIDAYS, DEFAULT_HOLIDAYS, data);
             }
         }, eH);
 
@@ -1740,13 +1928,17 @@ const App = () => {
             if(!u.length) INITIAL_USERS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','users'),x));
             else setUsers(u);
             
-            // Turn off loading once initial users fetch is complete
             setLoading(false); 
         }, eH);
 
         const uV = onSnapshot(collection(db,'artifacts',appId,'public','data','vacations'), s => setVacations(s.docs.map(d=>({_docId:d.id,...d.data()}))), eH);
         
-        return () => { uH(); uA(); uD(); uU(); uV(); };
+        const uL = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'audit_logs'), s => {
+            const logs = s.docs.map(doc => ({ _docId: doc.id, ...doc.data() })).sort((a,b) => b.timestamp - a.timestamp);
+            setAuditLogs(logs);
+        }, eH);
+
+        return () => { uH(); uA(); uD(); uU(); uV(); uL(); };
     }, [firebaseUser]);
 
     const handleNavigation = (dir) => {
@@ -1767,11 +1959,54 @@ const App = () => {
         setCalendarDate(newDate);
     };
 
-    const handleAddVacation = async (v) => { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'vacations'), { ...v, id: Date.now() }); };
-    const handleUpdateVacation = async (v) => { const { _docId, ...data } = v; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId), data); };
+    const handleRevertLog = async (log) => {
+        try {
+            const batch = writeBatch(db);
+            const getRef = (coll, id) => doc(db, 'artifacts', appId, 'public', 'data', coll, id);
+
+            if (log.type === 'CREATE' && log.docId) {
+                batch.delete(getRef(log.collection, log.docId));
+            } else if (log.type === 'UPDATE' && log.docId) {
+                batch.set(getRef(log.collection, log.docId), log.prevData, { merge: true });
+            } else if (log.type === 'DELETE' && log.docId) {
+                batch.set(getRef(log.collection, log.docId), log.prevData);
+            } else if (log.type === 'MASS_CREATE' && Array.isArray(log.prevData)) {
+                log.prevData.forEach(id => batch.delete(getRef(log.collection, id)));
+            } else if ((log.type === 'MASS_UPDATE' || log.type === 'MASS_DELETE') && Array.isArray(log.prevData)) {
+                log.prevData.forEach(item => {
+                    const id = item._docId || item.id;
+                    const data = { ...item };
+                    delete data._docId; 
+                    batch.set(getRef(log.collection, id), data);
+                });
+            }
+
+            batch.update(getRef('audit_logs', log._docId), { reverted: true });
+            await batch.commit();
+        } catch(e) {
+            console.error(e);
+            alert('Ошибка при откате изменений: ' + e.message);
+        }
+    };
+
+    const handleAddVacation = async (v) => { 
+        const ref = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'vacations'), { ...v, id: Date.now() }); 
+        logAction('ADD_VACATION', `Создана заявка на отпуск`, ref.id, null, { ...v, _docId: ref.id });
+    };
+    
+    const handleUpdateVacation = async (v) => { 
+        const { _docId, ...data } = v; 
+        const oldV = vacations.find(x => x._docId === _docId);
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', _docId), data); 
+        logAction('EDIT_VACATION', `Обновлена заявка на отпуск`, v.id, oldV, data);
+    };
+    
     const confirmDeleteVacation = async () => { 
         const v = vacations.find(x => x.id === deleteModal);
-        if(v) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId));
+        if(v) {
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId));
+            logAction('DELETE_VACATION', `Удален отпуск пользователя ${users.find(u => u.id === v.userId)?.name}`, v.id, v);
+        }
         setDeleteModal(null);
     };
 
@@ -1784,9 +2019,8 @@ const App = () => {
         );
     }
 
-    // Context Value definition
     const contextValue = {
-        currentUser, users, departments, vacations, holidays, authSettings
+        currentUser, users, departments, vacations, holidays, authSettings, auditLogs, logAction
     };
 
     return (
@@ -1806,6 +2040,7 @@ const App = () => {
                                     <HolidayManagement />
                                     <AuthSettingsManagement />
                                 </div>
+                                <AuditLogViewer />
                             </div>
                         ) : (currentUser.role === 'manager' || currentUser.role === 'ceo') ? (
                             showManagerStats ? <ManagerAnalyticsPage onBack={() => setShowManagerStats(false)} /> :
