@@ -76,7 +76,6 @@ const countBillableDays = (s, e, holidaysConfig) => {
 
 const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 
-
 // --- COMPONENTS ---
 
 const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = "Удалить", isDanger = true }) => {
@@ -101,7 +100,6 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText
 const Header = ({ onLogout }) => {
   const { currentUser: user, vacations, users } = useAppContext();
   
-  // Состояния для дропдауна и всплывающих поп-апов
   const [showNotifs, setShowNotifs] = useState(false);
   const [activePopups, setActivePopups] = useState([]);
   
@@ -178,7 +176,6 @@ const Header = ({ onLogout }) => {
   useEffect(() => {
       if (notifications.length > 0) {
           const newPopups = notifications.filter(n => !shownNotifsRef.current.has(n.id));
-
           if (newPopups.length > 0) {
               newPopups.forEach(n => shownNotifsRef.current.add(n.id));
               setActivePopups(prev => [...prev, ...newPopups]);
@@ -1339,7 +1336,15 @@ const DepartmentManagement = ({ deptDocs }) => {
         setEditingDept(null); 
     };
     
-    const attemptDelete = (dept) => { const usersInDept = users.filter(u => u.department === dept).length; if (usersInDept > 0) { setTargetDept(''); setMoveModal({ deptToDelete: dept, usersCount: usersInDept }); } else { setConfirmDelete({ dept }); }};
+    const attemptDelete = (dept) => { 
+        const usersInDept = users.filter(u => u.department === dept).length; 
+        if (usersInDept > 0) { 
+            setTargetDept(''); 
+            setMoveModal({ deptToDelete: dept, usersCount: usersInDept }); 
+        } else { 
+            setConfirmDelete({ dept }); 
+        }
+    };
     
     const confirmDeleteDept = async () => { 
         const deptDoc = deptDocs.find(d => d.name === confirmDelete.dept); 
@@ -1412,7 +1417,7 @@ const UserManagement = () => {
     const { users, departments, vacations, holidays, logAction } = useAppContext();
     const [isAdding, setIsAdding] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({ name: '', department: departments[0] || '', email: '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
+    const [formData, setFormData] = useState({ name: '', email: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
     const fileInputRef = useRef(null);
     const [confirmDelete, setConfirmDelete] = useState(null); 
     const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
@@ -1459,7 +1464,43 @@ const UserManagement = () => {
     };
     
     const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager/ceo),Дата найма (YYYY-MM-DD),Email\nИван Петров,IT Отдел,employee,2024-01-15,ivan@example.com"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
-    const handleExportSchedule = () => { let csvContent = ",,Остаток отпуска на 31.12.2025,"; FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); csvContent += "Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.2026\n"; csvContent += ",,,"; FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); csvContent += ",,\n"; users.filter(u => u.role !== 'admin').forEach(user => { const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); let row = `${user.id},${user.name},${user.carryOverDays},`; let totalUsed = 0; for (let i = 0; i < 12; i++) { const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === 2026; }); if (vac) { const days = countBillableDays(vac.startDate, vac.endDate, holidays); totalUsed += days; row += `${vac.startDate},${vac.endDate},${days},согласовано,`; } else { row += ",,,,"; } } const remaining = totalAllowance - totalUsed; row += `${totalUsed},${remaining}\n`; csvContent += row; }); const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'Vacation_Schedule_2026.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
+    const handleExportSchedule = () => { 
+        let csvContent = `,,Остаток отпуска на 31.12.${CURRENT_YEAR - 1},`; 
+        FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); 
+        csvContent += `Суммарное количество в графике,Остаток дней неиспользованных дней отпуска на 31.12.${CURRENT_YEAR}\n`; 
+        csvContent += ",,,"; 
+        FULL_MONTHS.forEach(() => csvContent += "дата начала,дата окончания,кол-во дней,согласование руководителя,"); 
+        csvContent += ",,\n"; 
+        
+        users.filter(u => u.role !== 'admin').forEach(user => { 
+            const userVacations = vacations.filter(v => v.userId === user.id && v.status === 'approved'); 
+            const totalAllowance = Number(user.yearlyAllowance) + Number(user.carryOverDays); 
+            let row = `${user.id},${user.name},${user.carryOverDays},`; 
+            let totalUsed = 0; 
+            
+            for (let i = 0; i < 12; i++) { 
+                const vac = userVacations.find(v => { const d = new Date(v.startDate); return d.getMonth() === i && d.getFullYear() === CURRENT_YEAR; }); 
+                if (vac) { 
+                    const days = countBillableDays(vac.startDate, vac.endDate, holidays); 
+                    totalUsed += days; 
+                    row += `${vac.startDate},${vac.endDate},${days},согласовано,`; 
+                } else { 
+                    row += ",,,,"; 
+                } 
+            } 
+            const remaining = totalAllowance - totalUsed; 
+            row += `${totalUsed},${remaining}\n`; 
+            csvContent += row; 
+        }); 
+        
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
+        const link = document.createElement('a'); 
+        link.href = URL.createObjectURL(blob); 
+        link.setAttribute('download', `Vacation_Schedule_${CURRENT_YEAR}.csv`); 
+        document.body.appendChild(link); 
+        link.click(); 
+        document.body.removeChild(link); 
+    };
     
     const handleFileUpload = (e) => { 
         const file = e.target.files[0]; 
@@ -1544,6 +1585,7 @@ const UserManagement = () => {
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative pb-16">
             {importInfo && (<div className={`absolute top-0 left-0 right-0 p-2 text-center text-sm font-medium z-20 ${importInfo.isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{importInfo.message}</div>)}
+            
             <div className="p-6 border-b border-gray-200 flex flex-wrap justify-between items-center bg-gray-50 gap-2">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-gray-500" /> Все сотрудники</h3>
                 <div className="flex gap-2 flex-wrap">
@@ -1569,7 +1611,9 @@ const UserManagement = () => {
                         </div>
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Отдел</label>
-                            <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">{departments.map((d, i) => <option key={`opt-${i}`} value={d}>{d}</option>)}</select>
+                            <select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="px-3 py-2 rounded border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                                {departments.map((d, i) => <option key={`opt-${i}`} value={d}>{d}</option>)}
+                            </select>
                         </div>
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 font-semibold mb-1 uppercase">Роль</label>
@@ -1608,19 +1652,50 @@ const UserManagement = () => {
                 </div>
             )}
             
-            <div className="overflow-auto max-h-96"><table className="w-full text-left text-sm"><thead className="bg-gray-50 sticky top-0"><tr><th className="p-3 w-8"><button onClick={toggleSelectAll} className="text-gray-400 hover:text-indigo-600">{allSelected ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5" />}</button></th><th>ФИО / Email</th><th>Отдел</th><th>Квота / Остаток</th><th></th></tr></thead><tbody>
-                {users.filter(u=>u.role!=='admin').map(u=>(<tr key={u._docId || u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="p-3"><button onClick={()=>toggleSelectUser(u.id)} className="text-gray-300 hover:text-indigo-500">{selectedIds.includes(u.id)?<CheckSquare className="w-5 h-5 text-indigo-600"/>:<Square className="w-5 h-5 text-gray-300"/>}</button></td>
-                    <td className="p-3 font-medium text-gray-800">
-                        {u.name} <span className="text-xs text-gray-400">({u.role})</span>
-                        <div className="text-[10px] text-gray-500 font-normal">{u.email || 'Нет email'}</div>
-                    </td>
-                    <td className="p-3 text-gray-500">{u.department}</td>
-                    <td className="p-3 text-center"><span className="font-bold text-gray-800">{u.yearlyAllowance}</span> / <span className="text-green-600">+{u.carryOverDays}</span></td>
-                    <td className="p-3 text-right"><button onClick={() => handleEdit(u)} className="text-blue-500 p-1 hover:bg-blue-50 rounded"><Pencil className="w-3 h-3"/></button><button onClick={() => setConfirmDelete(u)} className="text-red-400 p-1 hover:bg-red-50 rounded"><Trash2 className="w-3 h-3"/></button></td>
-                </tr>))}
-            </tbody></table></div>
-            <div className="p-3 border-t border-gray-200 bg-gray-50"><button onClick={()=>setConfirmDeleteAll(true)} className="text-red-500 text-xs flex gap-1 items-center hover:text-red-700"><AlertTriangle className="w-3 h-3"/> Удалить ВСЕХ</button></div>
+            <div className="overflow-auto max-h-96">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th className="p-3 w-8">
+                                <button onClick={toggleSelectAll} className="text-gray-400 hover:text-indigo-600">
+                                    {allSelected ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5" />}
+                                </button>
+                            </th>
+                            <th>ФИО / Email</th>
+                            <th>Отдел</th>
+                            <th>Квота / Остаток</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {users.filter(u=>u.role!=='admin').map(u=>(
+                            <tr key={u._docId || u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                <td className="p-3">
+                                    <button onClick={()=>toggleSelectUser(u.id)} className="text-gray-300 hover:text-indigo-500">
+                                        {selectedIds.includes(u.id)?<CheckSquare className="w-5 h-5 text-indigo-600"/>:<Square className="w-5 h-5 text-gray-300"/>}
+                                    </button>
+                                </td>
+                                <td className="p-3 font-medium text-gray-800">
+                                    {u.name} <span className="text-xs text-gray-400">({u.role})</span>
+                                    <div className="text-[10px] text-gray-500 font-normal">{u.email || 'Нет email'}</div>
+                                </td>
+                                <td className="p-3 text-gray-500">{u.department}</td>
+                                <td className="p-3 text-center"><span className="font-bold text-gray-800">{u.yearlyAllowance}</span> / <span className="text-green-600">+{u.carryOverDays}</span></td>
+                                <td className="p-3 text-right">
+                                    <button onClick={() => handleEdit(u)} className="text-blue-500 p-1 hover:bg-blue-50 rounded"><Pencil className="w-3 h-3"/></button>
+                                    <button onClick={() => setConfirmDelete(u)} className="text-red-400 p-1 hover:bg-red-50 rounded"><Trash2 className="w-3 h-3"/></button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div className="p-3 border-t border-gray-200 bg-gray-50">
+                <button onClick={()=>setConfirmDeleteAll(true)} className="text-red-500 text-xs flex gap-1 items-center hover:text-red-700">
+                    <AlertTriangle className="w-3 h-3"/> Удалить ВСЕХ
+                </button>
+            </div>
 
             {selectedIds.length > 0 && (
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-4 z-20 animate-bounce-in">
@@ -1631,21 +1706,28 @@ const UserManagement = () => {
                     <button onClick={() => setSelectedIds([])} className="ml-2 text-gray-500 hover:text-white"><X className="w-4 h-4" /></button>
                 </div>
             )}
-             {/* Modals */}
-             {bulkModal && (
+
+            {bulkModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200">
                         <h4 className="font-bold text-gray-800 mb-4 text-center">{bulkModal.type === 'department' ? 'Смена отдела' : 'Изменение квоты отпуска'}</h4>
                         <p className="text-xs text-gray-500 mb-4 text-center">Для {selectedIds.length} выбранных сотрудников</p>
                         {bulkModal.type === 'department' ? (
                             <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option value="">-- Выберите отдел --</option>{departments.map((d, i) => <option key={`bm-${i}`} value={d}>{d}</option>)}
+                                <option value="">-- Выберите отдел --</option>
+                                {departments.map((d, i) => <option key={`bm-${i}`} value={d}>{d}</option>)}
                             </select>
-                        ) : (<input type="number" placeholder="Новая квота (дней)" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-500" />)}
-                        <div className="flex gap-3"><button onClick={() => { setBulkModal(null); setBulkValue(''); }} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 font-medium">Отмена</button><button onClick={handleBulkSave} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Применить</button></div>
+                        ) : (
+                            <input type="number" placeholder="Новая квота (дней)" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="w-full mb-6 px-3 py-2 border border-gray-300 rounded text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+                        )}
+                        <div className="flex gap-3">
+                            <button onClick={() => { setBulkModal(null); setBulkValue(''); }} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 font-medium">Отмена</button>
+                            <button onClick={handleBulkSave} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Применить</button>
+                        </div>
                     </div>
                 </div>
             )}
+            
             <ConfirmModal isOpen={!!confirmDelete} title="Удаление сотрудника" message={confirmDelete ? `Вы уверены, что хотите удалить сотрудника ${confirmDelete.name}? Это действие необратимо.` : ''} onConfirm={handleDelete} onCancel={() => setConfirmDelete(null)} />
             <ConfirmModal isOpen={confirmDeleteAll} title="Удаление ВСЕХ сотрудников" message="ВНИМАНИЕ! Это действие удалит всех сотрудников (кроме админа)." confirmText="Удалить всех" onConfirm={handleDeleteAllUsers} onCancel={() => setConfirmDeleteAll(false)} />
         </div>
@@ -1687,9 +1769,7 @@ const LoginScreen = ({ onSelectUser }) => {
             setIsSocialLoading(true);
             setError('');
             
-            // Получаем инстанс auth
             const authInstance = getAuth();
-            
             const provider = providerType === 'google' ? new GoogleAuthProvider() : new OAuthProvider('yandex.com');
             const result = await signInWithPopup(authInstance, provider);
             const userEmail = result.user?.email;
@@ -1704,20 +1784,17 @@ const LoginScreen = ({ onSelectUser }) => {
             if (matchedUser) {
                 onSelectUser(matchedUser);
             } else {
-                // Если пользователя нет в базе - немедленно разлогиниваем его из Firebase
                 await signOut(authInstance);
-                // И возвращаем анонимную сессию, чтобы экран логина продолжал получать список пользователей
                 await signInAnonymously(authInstance);
                 setError(`Доступ запрещен. Сотрудник с email ${userEmail} не добавлен администратором.`);
             }
         } catch (err) {
             console.error('Auth error:', err);
             const errStr = err.toString();
-            // Обработка заблокированных всплывающих окон
             if (err.code === 'auth/popup-blocked' || errStr.includes('popup-blocked')) {
-                setError('Браузер или текущая среда заблокировали всплывающее окно. Пожалуйста, выберите сотрудника из списка выше для быстрого входа.');
+                setError('Браузер заблокировал всплывающее окно. Используйте вход через список.');
             } else if (err.code === 'auth/cancelled-popup-request' || errStr.includes('cancelled-popup-request') || errStr.includes('Pending promise was never set')) {
-                setError('Окно авторизации было закрыто или заблокировано. Пожалуйста, используйте вход через список.');
+                setError('Окно авторизации было закрыто. Используйте вход через список.');
             } else if (err.code !== 'auth/popup-closed-by-user') {
                 setError(`Ошибка авторизации: ${err.message}`);
             }
@@ -1729,369 +1806,4 @@ const LoginScreen = ({ onSelectUser }) => {
     const handleBack = () => { 
         setSelectedUserId(null); 
         setPasswordInput(''); 
-        setError(''); 
-        setIsAdminLogin(false); 
-        setSearchTerm(''); 
-        setIsSocialLoading(false);
-    };
-
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100 relative">
-                {!selectedUserId && !isAdminLogin && <button onClick={() => setIsAdminLogin(true)} className="absolute top-4 right-4 text-gray-300 hover:text-gray-500"><Lock className="w-4 h-4" /></button>}
-                <div className="text-center mb-6">
-                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg ${isAdminLogin ? 'bg-indigo-600 shadow-indigo-200' : 'bg-blue-600 shadow-blue-200'}`}>{isAdminLogin ? <Settings className="text-white w-8 h-8" /> : <Calendar className="text-white w-8 h-8" />}</div>
-                    <h1 className="text-2xl font-bold text-gray-900">{isAdminLogin ? 'Панель управления' : 'График отпусков'}</h1>
-                </div>
-                {!selectedUserId && !isAdminLogin ? (
-                    <div className="space-y-4">
-                        {authConfig.password && (
-                            <>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-                                    <input 
-                                        type="text" 
-                                        placeholder="Поиск по фамилии..." 
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                                    {filteredUsers.length === 0 && <p className="text-center text-gray-400 text-sm py-4">Сотрудники не найдены</p>}
-                                    {filteredUsers.sort((a,b) => (a.role === 'ceo' ? -2 : a.role === 'manager' ? -1 : 1)).map(user => (
-                                        <button key={user._docId || user.id} onClick={() => setSelectedUserId(user.id)} className={`w-full flex items-center p-3 rounded-xl border transition-all hover:shadow-sm text-left ${user.role === 'ceo' ? 'border-purple-100 bg-purple-50 hover:border-purple-500' : user.role === 'manager' ? 'border-emerald-100 bg-emerald-50 hover:border-emerald-500' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}>
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold mr-4 ${user.role === 'ceo' ? 'bg-purple-200 text-purple-700' : user.role === 'manager' ? 'bg-emerald-200 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{user.avatar}</div>
-                                            <div><div className="font-semibold text-gray-800">{user.name}</div><div className="text-xs text-gray-500">{user.role === 'ceo' ? 'СЕО' : user.role === 'manager' ? `Руководитель: ${user.department}` : user.department}</div></div>
-                                            <ChevronRight className="w-5 h-5 ml-auto text-gray-300" />
-                                        </button>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-
-                        {(authConfig.google || authConfig.yandex) && (
-                            <>
-                                {authConfig.password && (
-                                    <div className="relative flex items-center py-2 mt-4 mb-2">
-                                        <div className="flex-grow border-t border-gray-200"></div>
-                                        <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">быстрый вход</span>
-                                        <div className="flex-grow border-t border-gray-200"></div>
-                                    </div>
-                                )}
-
-                                <div className="flex gap-3">
-                                    {authConfig.google && (
-                                        <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('google')} className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm disabled:opacity-50">
-                                            {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : <svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>}
-                                            Google
-                                        </button>
-                                    )}
-                                    {authConfig.yandex && (
-                                        <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('yandex')} className="flex-1 flex items-center justify-center gap-2 bg-[#FFCC00] text-black font-medium py-2 px-4 rounded-lg hover:bg-[#F2C100] transition-colors text-sm shadow-sm disabled:opacity-50">
-                                            {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.03 1.758c1.332 0 2.457.218 3.376.654.93.424 1.545 1.085 1.848 1.98.303.88.455 2.03.455 3.442 0 1.624-.26 3.006-.782 4.145-.51 1.14-1.2 2.134-2.067 2.982L10.363 21.65h-3.41l6.545-6.75c-1.357-.363-2.357-1.024-3-1.98-.63-1-1.006-2.26-1.127-3.775H6.55v-2.36h2.788c.11-1.393.51-2.5 1.2-3.32.703-.824 1.703-1.236 3-1.236h.5v-2.22c0-.363-.122-.654-.364-.872-.23-.23-.62-.34-1.163-.34h-5.95V1.758h7.47z" fill="currentColor"/></svg>}
-                                            Яндекс
-                                        </button>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </form>
-                )}
-            </div>
-        </div>
-    );
-};
-
-const App = () => {
-    const [firebaseUser, setFirebaseUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-    
-    // Global State
-    const [currentUser, setCurrentUser] = useState(null);
-    const [users, setUsers] = useState([]);
-    const [departments, setDepartments] = useState([]);
-    const [vacations, setVacations] = useState([]);
-    const [deptDocs, setDeptDocs] = useState([]);
-    const [holidays, setHolidays] = useState({ ...DEFAULT_HOLIDAYS });
-    const [authSettings, setAuthSettings] = useState(DEFAULT_AUTH_SETTINGS);
-    const [auditLogs, setAuditLogs] = useState([]);
-
-    // Calendar UI State
-    const [calendarDate, setCalendarDate] = useState(new Date(CURRENT_YEAR, 0, 1)); 
-    const [viewMode, setViewMode] = useState('month');
-    const [deleteModal, setDeleteModal] = useState(null);
-    const [showManagerStats, setShowManagerStats] = useState(false);
-
-    const logAction = async (type, details, targetId = null, previousData = null, newData = null) => {
-        if (!currentUser && type !== 'SYSTEM') return;
-        try {
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'audit_logs'), {
-                timestamp: Date.now(),
-                userId: currentUser ? currentUser.id : 'system',
-                userName: currentUser ? currentUser.name : 'Система',
-                type,
-                details,
-                targetId,
-                previousData,
-                newData
-            });
-        } catch (e) {
-            console.error("Logging failed", e);
-        }
-    };
-
-    // Логика автоматической отправки Email-уведомлений за 7 дней
-    useEffect(() => {
-        if (!firebaseUser || !vacations.length || !users.length) return;
-        
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        const nextWeek = new Date(today);
-        nextWeek.setDate(today.getDate() + 7);
-
-        vacations.forEach(async (v) => {
-            if (v.status === 'approved' && !v.notified7Days) {
-                const start = new Date(v.startDate);
-                start.setHours(0,0,0,0);
-                
-                if (start >= today && start <= nextWeek) {
-                    try {
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId), { notified7Days: true });
-                        
-                        const emp = users.find(u => u.id === v.userId);
-                        const managers = users.filter(u => u.department === emp?.department && u.role === 'manager');
-                        
-                        if (emp) {
-                            console.log(`[EMAIL СЕРВИС] 📧 Кому: Сотруднику (${emp.name}). Тема: Скоро отпуск! Текст: Ваш отпуск начинается ${new Date(v.startDate).toLocaleDateString()}`);
-                        }
-                        managers.forEach(m => {
-                            console.log(`[EMAIL СЕРВИС] 📧 Кому: Руководителю (${m.name}). Тема: Отпуск в отделе. Текст: Сотрудник ${emp?.name} уходит в отпуск ${new Date(v.startDate).toLocaleDateString()}`);
-                        });
-
-                        window.dispatchEvent(new CustomEvent('app-toast', { 
-                            detail: { 
-                                title: '📧 Отправка Email', 
-                                message: `Письма об отпуске (${emp?.name}) успешно отправлены.`,
-                                type: 'email'
-                            } 
-                        }));
-
-                    } catch (err) {
-                        console.error("Ошибка при симуляции отправки email:", err);
-                    }
-                }
-            }
-        });
-    }, [vacations, users, firebaseUser]);
-
-    useEffect(() => {
-        const initAuth = async () => {
-            if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-                try { await signInWithCustomToken(auth, window.__initial_auth_token); } catch { await signInAnonymously(auth); }
-            } else await signInAnonymously(auth);
-        };
-        initAuth();
-        return onAuthStateChanged(auth, user => {
-            setFirebaseUser(user);
-        });
-    }, []);
-
-    useEffect(() => {
-        if(!firebaseUser) return;
-        const eH = (e) => console.log("DB sync...", e);
-        
-        const uH = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), s => {
-            if (s.exists()) {
-                const data = s.data();
-                for (const key in GLOBAL_HOLIDAYS) delete GLOBAL_HOLIDAYS[key];
-                Object.assign(GLOBAL_HOLIDAYS, DEFAULT_HOLIDAYS, data);
-            }
-        }, eH);
-
-        const uA = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'auth'), s => {
-            if (s.exists()) {
-                setAuthSettings({ ...DEFAULT_AUTH_SETTINGS, ...s.data() });
-            } else {
-                setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'auth'), DEFAULT_AUTH_SETTINGS);
-            }
-        }, eH);
-
-        const uD = onSnapshot(collection(db,'artifacts',appId,'public','data','departments'), s => {
-            const d = s.docs.map(doc=>({id:doc.id,...doc.data()}));
-            if(!d.length) INITIAL_DEPARTMENTS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','departments'),x));
-            else { setDeptDocs(d); setDepartments([...new Set(d.map(x=>x.name))]); }
-        }, eH);
-
-        const uU = onSnapshot(collection(db,'artifacts',appId,'public','data','users'), s => {
-            const u = s.docs.map(doc=>({_docId:doc.id,...doc.data()}));
-            if(!u.length) INITIAL_USERS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','users'),x));
-            else setUsers(u);
-            
-            setLoading(false); 
-        }, eH);
-
-        const uV = onSnapshot(collection(db,'artifacts',appId,'public','data','vacations'), s => setVacations(s.docs.map(d=>({_docId:d.id,...d.data()}))), eH);
-        
-        const uL = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'audit_logs'), s => {
-            const logs = s.docs.map(doc => ({ _docId: doc.id, ...doc.data() })).sort((a,b) => b.timestamp - a.timestamp);
-            setAuditLogs(logs);
-        }, eH);
-
-        return () => { uH(); uA(); uD(); uU(); uV(); uL(); };
-    }, [firebaseUser]);
-
-    const handleNavigation = (dir) => {
-        const newDate = new Date(calendarDate);
-        if (viewMode === 'year') {
-            newDate.setFullYear(newDate.getFullYear() + dir);
-        } else if (viewMode === 'quarter') {
-            newDate.setMonth(newDate.getMonth() + (dir * 3));
-        } else {
-            newDate.setMonth(newDate.getMonth() + dir);
-        }
-        setCalendarDate(newDate);
-    };
-    
-    const handleYearNav = (dir) => {
-        const newDate = new Date(calendarDate);
-        newDate.setFullYear(newDate.getFullYear() + dir);
-        setCalendarDate(newDate);
-    };
-
-    const handleRevertLog = async (log) => {
-        try {
-            const batch = writeBatch(db);
-            const getRef = (coll, id) => doc(db, 'artifacts', appId, 'public', 'data', coll, id);
-
-            if (log.type === 'CREATE' && log.docId) {
-                batch.delete(getRef(log.collection, log.docId));
-            } else if (log.type === 'UPDATE' && log.docId) {
-                batch.set(getRef(log.collection, log.docId), log.prevData, { merge: true });
-            } else if (log.type === 'DELETE' && log.docId) {
-                batch.set(getRef(log.collection, log.docId), log.prevData);
-            } else if (log.type === 'MASS_CREATE' && Array.isArray(log.prevData)) {
-                log.prevData.forEach(id => batch.delete(getRef(log.collection, id)));
-            } else if ((log.type === 'MASS_UPDATE' || log.type === 'MASS_DELETE') && Array.isArray(log.prevData)) {
-                log.prevData.forEach(item => {
-                    const id = item._docId || item.id;
-                    const data = { ...item };
-                    delete data._docId; 
-                    batch.set(getRef(log.collection, id), data);
-                });
-            }
-
-            batch.update(getRef('audit_logs', log._docId), { reverted: true });
-            await batch.commit();
-        } catch(e) {
-            console.error(e);
-            alert('Ошибка при откате изменений: ' + e.message);
-        }
-    };
-
-    const handleAddVacation = async (v) => { 
-        const ref = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'vacations'), { ...v, id: Date.now() }); 
-        logAction('ADD_VACATION', `Создана заявка на отпуск`, ref.id, null, { ...v, _docId: ref.id });
-    };
-    
-    const handleUpdateVacation = async (v) => { 
-        const { _docId, ...data } = v; 
-        const oldV = vacations.find(x => x._docId === _docId);
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', _docId), data); 
-        logAction('EDIT_VACATION', `Обновлена заявка на отпуск`, v.id, oldV, data);
-    };
-    
-    const confirmDeleteVacation = async () => { 
-        const v = vacations.find(x => x.id === deleteModal);
-        if(v) {
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId));
-            logAction('DELETE_VACATION', `Удален отпуск пользователя ${users.find(u => u.id === v.userId)?.name}`, v.id, v);
-        }
-        setDeleteModal(null);
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-500">
-                <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
-                <p>Загрузка данных...</p>
-            </div>
-        );
-    }
-
-    const contextValue = {
-        currentUser, users, departments, vacations, holidays, authSettings, auditLogs, logAction
-    };
-
-    return (
-        <AppContext.Provider value={contextValue}>
-            {!currentUser ? (
-                 <LoginScreen onSelectUser={setCurrentUser} />
-            ) : (
-                <div className="min-h-screen bg-gray-50 text-gray-900 font-sans pb-12 relative overflow-hidden">
-                    <Header onLogout={() => setCurrentUser(null)} />
-                    <main className="max-w-[1400px] mx-auto px-4 pt-8">
-                        {currentUser.role === 'admin' ? (
-                            <div className="space-y-6">
-                                <AdminStats />
-                                <UserManagement />
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-                                    <DepartmentManagement deptDocs={deptDocs} />
-                                    <HolidayManagement />
-                                    <AuthSettingsManagement />
-                                </div>
-                                <AuditLogViewer />
-                            </div>
-                        ) : (currentUser.role === 'manager' || currentUser.role === 'ceo') ? (
-                            showManagerStats ? <ManagerAnalyticsPage onBack={() => setShowManagerStats(false)} /> :
-                            <div className="space-y-8">
-                                 <div className="flex justify-between items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                                    <h2 className="text-lg font-bold text-emerald-900">Кабинет: {currentUser.role === 'ceo' ? 'СЕО' : currentUser.department}</h2>
-                                    {currentUser.role !== 'ceo' && <button onClick={() => setShowManagerStats(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><BarChart2 className="w-4 h-4"/> Статистика</button>}
-                                 </div>
-                                 <ManagerApprovals onUpdateVacation={handleUpdateVacation} />
-                                 
-                                 <UserView 
-                                    onAdd={handleAddVacation} 
-                                    onUpdate={handleUpdateVacation} 
-                                    onDel={(id)=>setDeleteModal(id)} 
-                                    calendarProps={{
-                                        currentMonthDate: calendarDate, 
-                                        onPrev: () => handleNavigation(-1), 
-                                        onNext: () => handleNavigation(1), 
-                                        onPrevYear: () => handleYearNav(-1), 
-                                        onNextYear: () => handleYearNav(1), 
-                                        viewMode: viewMode, 
-                                        setViewMode: setViewMode
-                                    }} 
-                                />
-                            </div>
-                        ) : (
-                             <div className="space-y-8">
-                                <UserView 
-                                    onAdd={handleAddVacation} 
-                                    onUpdate={handleUpdateVacation} 
-                                    onDel={(id)=>setDeleteModal(id)} 
-                                    calendarProps={{
-                                        currentMonthDate: calendarDate, 
-                                        onPrev: () => handleNavigation(-1), 
-                                        onNext: () => handleNavigation(1), 
-                                        onPrevYear: () => handleYearNav(-1), 
-                                        onNextYear: () => handleYearNav(1), 
-                                        viewMode: viewMode, 
-                                        setViewMode: setViewMode
-                                    }} 
-                                />
-                            </div>
-                        )}
-                        <ConfirmModal isOpen={!!deleteModal} title="Отмена" message="Удалить отпуск?" onConfirm={confirmDeleteVacation} onCancel={() => setDeleteModal(null)} />
-                    </main>
-                </div>
-            )}
-        </AppContext.Provider>
-    );
-};
-
-const container = document.getElementById('root');
-const root = createRoot(container);
-root.render(React.createElement(App));
+        setError('');
