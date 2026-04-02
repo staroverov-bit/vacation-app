@@ -5,7 +5,7 @@ import {
   Plus, BarChart2, Maximize, LayoutGrid, Trash2, Pencil, Info, PieChart, Check, Settings, 
   UserPlus, X, ClipboardList, Lock, Key, ArrowLeft, ChevronDown, ChevronUp, UserCheck, 
   TrendingUp, AlertCircle, Upload, FileText, AlertOctagon, Download, Clock, XCircle, 
-  Square, CheckSquare, Search, Save, Send, Loader2, Bell, History, RotateCcw
+  Square, CheckSquare, Search, Save, Send, Loader2, Bell, History, RotateCcw, Mail
 } from 'https://esm.sh/lucide-react@0.330.0';
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js';
@@ -26,8 +26,6 @@ const DEFAULT_HOLIDAYS = {
     [CURRENT_YEAR]: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
     [CURRENT_YEAR + 1]: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'],
 };
-let GLOBAL_HOLIDAYS = { ...DEFAULT_HOLIDAYS }; 
-
 const DEFAULT_AUTH_SETTINGS = { password: true, google: true, yandex: true };
 
 const MONTHS_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
@@ -39,14 +37,12 @@ const INITIAL_DEPARTMENTS_DATA = [
 ];
 
 const INITIAL_USERS_DATA = [
-  { id: 100, name: 'Стив Джобс', department: 'Управление', email: 'ceo@company.com', avatar: 'СД', role: 'ceo', yearlyAllowance: 28, carryOverDays: 0, hireDate: '2010-01-01', password: '123' },
-  { id: 999, name: 'HR Администратор', department: 'HR', email: 'hr@company.com', avatar: 'AD', role: 'admin', yearlyAllowance: 0, carryOverDays: 0, hireDate: '2020-01-01', password: 'admin' },
-  { id: 50, name: 'Ольга Начальникова', department: 'Продажи', email: 'olga@company.com', avatar: 'ON', role: 'manager', yearlyAllowance: 28, carryOverDays: 10, hireDate: '2021-03-15', password: '123' },
-  { id: 1, name: 'Алексей Петров', department: 'IT Отдел', email: 'alex@company.com', avatar: 'AP', role: 'employee', yearlyAllowance: 28, carryOverDays: 5, hireDate: '2023-05-10', password: '123' },
-  { id: 2, name: 'Мария Сидорова', department: 'IT Отдел', email: 'maria@company.com', avatar: 'MS', role: 'employee', yearlyAllowance: 28, carryOverDays: 0, hireDate: '2024-02-15', password: '123' },
+  { id: 100, name: 'Стив Джобс', email: 'ceo@example.com', department: 'Управление', avatar: 'СД', role: 'ceo', yearlyAllowance: 28, carryOverDays: 0, hireDate: `${CURRENT_YEAR - 5}-01-01`, password: '123' },
+  { id: 999, name: 'HR Администратор', email: 'admin@example.com', department: 'HR', avatar: 'AD', role: 'admin', yearlyAllowance: 0, carryOverDays: 0, hireDate: `${CURRENT_YEAR - 2}-01-01`, password: 'admin' },
+  { id: 50, name: 'Ольга Начальникова', email: 'manager@example.com', department: 'Продажи', avatar: 'ON', role: 'manager', yearlyAllowance: 28, carryOverDays: 10, hireDate: `${CURRENT_YEAR - 1}-03-15`, password: '123' },
+  { id: 1, name: 'Алексей Петров', email: 'employee1@example.com', department: 'IT Отдел', avatar: 'AP', role: 'employee', yearlyAllowance: 28, carryOverDays: 5, hireDate: `${CURRENT_YEAR}-05-10`, password: '123' },
+  { id: 2, name: 'Мария Сидорова', email: 'employee2@example.com', department: 'IT Отдел', avatar: 'MS', role: 'employee', yearlyAllowance: 28, carryOverDays: 0, hireDate: `${CURRENT_YEAR}-02-15`, password: '123' },
 ];
-
-const INITIAL_VACATIONS_DATA = [];
 
 // --- APP CONTEXT ---
 const AppContext = createContext(null);
@@ -57,33 +53,28 @@ const useAppContext = () => {
     return context;
 };
 
-// --- HELPERS ---
-const isHoliday = (d, holidaysConfig = GLOBAL_HOLIDAYS) => {
+// --- PURE HELPERS ---
+const isHoliday = (d, holidaysConfig) => {
     const year = d.getFullYear();
     const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`;
     return (holidaysConfig[year] || []).includes(dateStr);
 };
-const isWeekend = (d, holidaysConfig = GLOBAL_HOLIDAYS) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, holidaysConfig);
-const countBillableDays = (s, e, holidaysConfig = GLOBAL_HOLIDAYS) => {
+
+const isWeekend = (d, holidaysConfig) => {
+    return d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, holidaysConfig);
+};
+
+const countBillableDays = (s, e, holidaysConfig) => {
   if (!s || !e) return 0;
   let c = 0, cur = new Date(s), end = new Date(e);
-  while (cur <= end) { if (!isHoliday(cur, holidaysConfig)) c++; cur.setDate(cur.getDate() + 1); }
+  while (cur <= end) { 
+      if (!isHoliday(cur, holidaysConfig)) c++; 
+      cur.setDate(cur.getDate() + 1); 
+  }
   return c;
 };
-const checkOverlap = (s1, e1, s2, e2) => s1 <= e2 && s2 <= e1;
-const isFuture = (d) => new Date(d) > new Date(2025, 11, 31);
-const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 
-const getApproverForUser = (user, users) => {
-    if (!user || !users) return null;
-    if (user.role === 'admin' || user.role === 'ceo') return null;
-    if (user.role === 'manager') {
-        return users.find(u => u.role === 'ceo') || users.find(u => u.role === 'admin');
-    }
-    const deptManager = users.find(u => u.department === user.department && u.role === 'manager');
-    if (deptManager) return deptManager;
-    return users.find(u => u.role === 'ceo') || users.find(u => u.role === 'admin');
-};
+const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 
 // --- COMPONENTS ---
 
@@ -1418,7 +1409,7 @@ const UserManagement = () => {
     const { users, departments, vacations, holidays, logAction } = useAppContext();
     const [isAdding, setIsAdding] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({ name: '', department: departments[0] || '', email: '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
+    const [formData, setFormData] = useState({ name: '', email: '', department: departments[0] || '', hireDate: '', yearlyAllowance: 28, carryOverDays: 0, role: 'employee', password: '123' });
     const fileInputRef = useRef(null);
     const [confirmDelete, setConfirmDelete] = useState(null); 
     const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
@@ -1465,6 +1456,7 @@ const UserManagement = () => {
     };
     
     const downloadTemplate = () => { const headers = "ФИО,Отдел,Роль (employee/manager/ceo),Дата найма (YYYY-MM-DD),Email\nИван Петров,IT Отдел,employee,2024-01-15,ivan@example.com"; const blob = new Blob([headers], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.setAttribute('download', 'employees_template.csv'); document.body.appendChild(link); link.click(); document.body.removeChild(link); };
+    
     const handleExportSchedule = () => { 
         let csvContent = `,,Остаток отпуска на 31.12.${CURRENT_YEAR - 1},`; 
         FULL_MONTHS.forEach(m => csvContent += `${m},,,,`); 
@@ -1874,14 +1866,6 @@ const LoginScreen = ({ onSelectUser }) => {
                                 </div>
                             </>
                         )}
-
-                        {!authConfig.password && !authConfig.google && !authConfig.yandex && (
-                            <div className="text-center py-8 text-gray-500 text-sm bg-gray-50 rounded-xl border border-gray-100">
-                                <AlertTriangle className="w-8 h-8 text-orange-400 mx-auto mb-2" />
-                                Все методы входа отключены администратором
-                            </div>
-                        )}
-                        {error && <p className="mt-2 text-center text-sm text-red-600">{error}</p>}
                     </div>
                 ) : (
                     <form onSubmit={handleLogin} className="animate-fadeIn">
@@ -1897,6 +1881,31 @@ const LoginScreen = ({ onSelectUser }) => {
                             {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
                         </div>
                         <button className={`w-full text-white font-bold py-2 px-4 rounded-lg transition-colors mb-4 ${isAdminLogin ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>Войти</button>
+                        
+                        {!isAdminLogin && (authConfig.google || authConfig.yandex) && (
+                            <>
+                                <div className="relative flex items-center py-2 mb-4">
+                                    <div className="flex-grow border-t border-gray-200"></div>
+                                    <span className="flex-shrink-0 mx-4 text-gray-400 text-xs">или войти через</span>
+                                    <div className="flex-grow border-t border-gray-200"></div>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    {authConfig.google && (
+                                        <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('google')} className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors text-sm shadow-sm disabled:opacity-50">
+                                            {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : <svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>}
+                                            Google
+                                        </button>
+                                    )}
+                                    {authConfig.yandex && (
+                                        <button type="button" disabled={isSocialLoading} onClick={() => handleSocialLogin('yandex')} className="flex-1 flex items-center justify-center gap-2 bg-[#FFCC00] text-black font-medium py-2 px-4 rounded-lg hover:bg-[#F2C100] transition-colors text-sm shadow-sm disabled:opacity-50">
+                                            {isSocialLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14.03 1.758c1.332 0 2.457.218 3.376.654.93.424 1.545 1.085 1.848 1.98.303.88.455 2.03.455 3.442 0 1.624-.26 3.006-.782 4.145-.51 1.14-1.2 2.134-2.067 2.982L10.363 21.65h-3.41l6.545-6.75c-1.357-.363-2.357-1.024-3-1.98-.63-1-1.006-2.26-1.127-3.775H6.55v-2.36h2.788c.11-1.393.51-2.5 1.2-3.32.703-.824 1.703-1.236 3-1.236h.5v-2.22c0-.363-.122-.654-.364-.872-.23-.23-.62-.34-1.163-.34h-5.95V1.758h7.47z" fill="currentColor"/></svg>}
+                                            Яндекс
+                                        </button>
+                                    )}
+                                </div>
+                            </>
+                        )}
                     </form>
                 )}
             </div>
