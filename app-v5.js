@@ -76,6 +76,19 @@ const countBillableDays = (s, e, holidaysConfig) => {
 
 const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 
+// ВОТ ЭТА ФУНКЦИЯ БЫЛА СЛУЧАЙНО УДАЛЕНА И ВЫЗЫВАЛА ОШИБКУ:
+const getApproverForUser = (user, users) => {
+    if (!user || !users) return null;
+    if (user.role === 'admin' || user.role === 'ceo') return null;
+    if (user.role === 'manager') {
+        return users.find(u => u.role === 'ceo') || users.find(u => u.role === 'admin');
+    }
+    const deptManager = users.find(u => u.department === user.department && u.role === 'manager');
+    if (deptManager) return deptManager;
+    return users.find(u => u.role === 'ceo') || users.find(u => u.role === 'admin');
+};
+
+
 // --- COMPONENTS ---
 
 const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = "Удалить", isDanger = true }) => {
@@ -1336,7 +1349,15 @@ const DepartmentManagement = ({ deptDocs }) => {
         setEditingDept(null); 
     };
     
-    const attemptDelete = (dept) => { const usersInDept = users.filter(u => u.department === dept).length; if (usersInDept > 0) { setTargetDept(''); setMoveModal({ deptToDelete: dept, usersCount: usersInDept }); } else { setConfirmDelete({ dept }); }};
+    const attemptDelete = (dept) => { 
+        const usersInDept = users.filter(u => u.department === dept).length; 
+        if (usersInDept > 0) { 
+            setTargetDept(''); 
+            setMoveModal({ deptToDelete: dept, usersCount: usersInDept }); 
+        } else { 
+            setConfirmDelete({ dept }); 
+        }
+    };
     
     const confirmDeleteDept = async () => { 
         const deptDoc = deptDocs.find(d => d.name === confirmDelete.dept); 
