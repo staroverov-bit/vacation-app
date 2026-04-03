@@ -76,10 +76,9 @@ const countBillableDays = (s, e, holidaysConfig) => {
 
 const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 
-// ВОТ ЭТА ФУНКЦИЯ БЫЛА СЛУЧАЙНО УДАЛЕНА И ВЫЗЫВАЛА ОШИБКУ:
 const getApproverForUser = (user, users) => {
     if (!user || !users) return null;
-    if (user.role === 'admin' || user.role === 'ceo') return null;
+    if (user.role === 'admin' || user.role === 'ceo') return null; 
     if (user.role === 'manager') {
         return users.find(u => u.role === 'ceo') || users.find(u => u.role === 'admin');
     }
