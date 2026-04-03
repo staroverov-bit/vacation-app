@@ -47,13 +47,13 @@ const useAppContext = () => {
 };
 
 // --- PURE HELPERS ---
-const isHoliday = (d, holidaysConfig) => {
+const isHoliday = (d, holidaysConfig = GLOBAL_HOLIDAYS) => {
     const year = d.getFullYear();
     const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`;
     return (holidaysConfig[year] || []).includes(dateStr);
 };
-const isWeekend = (d, holidaysConfig) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, holidaysConfig);
-const countBillableDays = (s, e, holidaysConfig) => {
+const isWeekend = (d, holidaysConfig = GLOBAL_HOLIDAYS) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, holidaysConfig);
+const countBillableDays = (s, e, holidaysConfig = GLOBAL_HOLIDAYS) => {
   if (!s || !e) return 0;
   let c = 0, cur = new Date(s), end = new Date(e);
   while (cur <= end) { if (!isHoliday(cur, holidaysConfig)) c++; cur.setDate(cur.getDate() + 1); }
@@ -274,91 +274,6 @@ const PersonalYearCalendar = ({ year, onSelectRange, selection, balance, onPrevY
         </div>
     );
 };
-
-const TeamCalendar = ({ currentMonthDate, onPrev, onNext, viewMode, setViewMode, localDraft }) => {
-    const { vacations, users, departments, currentUser, holidays } = useAppContext();
-    const year = currentMonthDate.getFullYear(), month = currentMonthDate.getMonth(), today = new Date();
-    const months = viewMode === 'year' ? MONTHS_SHORT.map((_, i) => i) : viewMode === 'quarter' ? [Math.floor(month/3)*3, Math.floor(month/3)*3+1, Math.floor(month/3)*3+2] : [month];
-
-    const [expandedDepts, setExpandedDepts] = useState([]);
-    const [ceoFilter, setCeoFilter] = useState('direct');
-
-    useEffect(() => { if (currentUser.role === 'admin' || currentUser.role === 'ceo') setExpandedDepts(departments); else setExpandedDepts([currentUser.department]); }, [currentUser, departments]);
-    const toggleDept = (dept) => { if (expandedDepts.includes(dept)) setExpandedDepts(expandedDepts.filter(d => d !== dept)); else setExpandedDepts([...expandedDepts, dept]); };
-    const getVacationForDay = (uid, d) => vacations.find(v => v.userId === uid && d >= new Date(v.startDate).setHours(0,0,0,0) && d <= new Date(v.endDate).setHours(0,0,0,0));
-    const isLocalDraftDay = (d) => { if (!localDraft || !localDraft.start || !localDraft.end) return false; return d >= new Date(localDraft.start).setHours(0,0,0,0) && d <= new Date(localDraft.end).setHours(0,0,0,0); };
-
-    const usersByDept = useMemo(() => {
-        const grouped = {}; departments.forEach(d => grouped[d] = []);
-        users.filter(u => u.role !== 'admin').forEach(u => { 
-            if (currentUser.role === 'ceo' && ceoFilter === 'direct') {
-                const isManager = u.role === 'manager', isOrphan = u.role === 'employee' && !users.some(other => other.department === u.department && other.role === 'manager');
-                if (!isManager && !isOrphan) return;
-            }
-            if(grouped[u.department]) grouped[u.department].push(u); 
-        });
-        if (currentUser.role !== 'admin' && currentUser.role !== 'ceo') {
-            const myDept = currentUser.department;
-            if (grouped[myDept]) grouped[myDept].sort((a, b) => a.id === currentUser.id ? -1 : b.id === currentUser.id ? 1 : 0);
-        }
-        return grouped;
-    }, [users, departments, currentUser, ceoFilter]);
-
-    return (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white sticky left-0 z-20">
-                <div className="font-bold text-gray-800 flex gap-2 text-lg"><Calendar className="w-6 h-6 text-blue-600"/> {viewMode === 'year' ? year : `${FULL_MONTHS[month]} ${year}`}</div>
-                <div className="flex gap-3 items-center">
-                    {currentUser.role === 'ceo' && (<div className="flex bg-gray-100 p-1 rounded-lg mr-2"><button onClick={()=>setCeoFilter('direct')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${ceoFilter==='direct'?'bg-white text-purple-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Мои подчиненные</button><button onClick={()=>setCeoFilter('all')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${ceoFilter==='all'?'bg-white text-purple-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Все сотрудники</button></div>)}
-                    <div className="flex bg-gray-100 p-1 rounded-lg"><button onClick={()=>setViewMode('month')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode==='month'?'bg-white text-blue-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Месяц</button><button onClick={()=>setViewMode('quarter')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode==='quarter'?'bg-white text-blue-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Квартал</button><button onClick={()=>setViewMode('year')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode==='year'?'bg-white text-blue-600 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>Год</button></div>
-                    <div className="flex gap-1"><button onClick={onPrev} className="p-2 hover:bg-gray-100 rounded-full text-gray-600"><ChevronLeft className="w-5 h-5"/></button><button onClick={onNext} className="p-2 hover:bg-gray-100 rounded-full text-gray-600"><ChevronRight className="w-5 h-5"/></button></div>
-                </div>
-            </div>
-            <div className="overflow-x-auto relative">
-                <div className="min-w-[800px]">
-                    <div className="flex border-b border-gray-200 bg-gray-50/50">
-                        <div className="w-64 flex-shrink-0 p-3 border-r border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.1)]">Сотрудник</div>
-                        <div className="flex-grow flex">
-                            {months.map(mIdx => {
-                                const daysInMonth = new Date(year, mIdx+1, 0).getDate();
-                                return viewMode === 'year' ? <div key={`mhdr-${mIdx}`} className="flex-1 text-center text-xs font-semibold py-3 border-r border-gray-200 text-gray-600">{MONTHS_SHORT[mIdx]}</div> : Array.from({length:daysInMonth},(_,i)=>i+1).map(d => {
-                                        const currentDate = new Date(year, mIdx, d), isWe = isWeekend(currentDate, holidays), isToday = isSameDay(currentDate, today);
-                                        return (<div key={`dhdr-${mIdx}-${d}`} className={`w-8 flex-shrink-0 flex flex-col items-center justify-center text-[10px] py-2 border-r border-gray-200 min-w-[28px] ${isWe ? 'bg-gray-50 text-gray-400' : 'bg-white text-gray-600'} ${isToday ? 'bg-blue-50 text-blue-600 font-bold ring-1 ring-inset ring-blue-200' : ''}`}>{d}</div>)
-                                    });
-                            })}
-                        </div>
-                    </div>
-                    {departments.map(dept => {
-                        const deptUsers = usersByDept[dept];
-                        if (!deptUsers || deptUsers.length === 0) return null;
-                        return (<React.Fragment key={`dept-${dept}`}>
-                            <div onClick={()=>toggleDept(dept)} className="bg-gray-100/80 px-4 py-2 text-xs font-bold uppercase cursor-pointer flex items-center gap-2 hover:bg-gray-200/80 border-b border-gray-200 text-gray-700 sticky left-0 z-10">{expandedDepts.includes(dept)?<ChevronDown className="w-3 h-3"/>:<ChevronRight className="w-3 h-3"/>}{dept}</div>
-                            {expandedDepts.includes(dept) && deptUsers.map(u => (
-                                <div key={u._docId || u.id} className={`flex border-b border-gray-100 h-10 transition-colors ${u.id===currentUser.id?'bg-blue-50/30 hover:bg-blue-50/50':'hover:bg-gray-50'}`}>
-                                    <div className={`w-64 flex-shrink-0 px-4 border-r border-gray-200 flex items-center gap-3 text-sm sticky left-0 z-10 ${u.id===currentUser.id?'bg-blue-50/30 backdrop-blur-sm':'bg-white'}`}><div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center font-bold text-xs text-gray-600 border border-gray-200 shadow-sm">{u.avatar}</div><span className={`truncate ${u.id===currentUser.id ? 'font-semibold text-blue-700' : 'text-gray-700'}`}>{u.name}</span></div>
-                                    <div className="flex-grow flex">{months.map(mIdx => {
-                                        const days = new Date(year, mIdx+1, 0).getDate();
-                                        return viewMode === 'year' ? <div key={`cyear-${u.id}-${mIdx}`} className="flex-1 border-r border-gray-200 relative bg-white">{Array.from({length:days},(_,i)=>i+1).map(d=>{
-                                            const dt = new Date(year,mIdx,d).getTime(), v = getVacationForDay(u.id, dt);
-                                            return v && v.status === 'approved' ? <div key={`v-${u.id}-${mIdx}-${d}`} className="absolute inset-y-1 bg-blue-500 rounded-sm opacity-90" style={{left:`${(d/days)*100}%`, width: `${100/days}%`}}/> : null;
-                                        })}</div> : Array.from({length:days},(_,i)=>i+1).map(d => {
-                                            const dt = new Date(year, mIdx, d).getTime(), v = getVacationForDay(u.id, dt), isWe = isWeekend(new Date(year, mIdx, d), holidays), isLocal = u.id === currentUser.id && isLocalDraftDay(dt);
-                                            let content = null;
-                                            if (isLocal) content = <div className="absolute inset-1 bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes-light.png')] bg-indigo-100 border border-indigo-300 rounded-sm animate-pulse" title="Планируется"></div>;
-                                            else if (v) { if (v.status === 'approved') content = <div className="absolute inset-1 bg-blue-500 rounded-sm shadow-sm" title="Отпуск"></div>; else if (v.status === 'pending') content = <div className="absolute inset-1 bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes-light.png')] bg-amber-200 rounded-sm border border-amber-300" title="На согласовании"></div>; else if (v.status === 'draft') content = <div className="absolute inset-1 border-2 border-dashed border-gray-300 rounded-sm bg-gray-50" title="Черновик"></div>; }
-                                            return <div key={`cday-${u.id}-${mIdx}-${d}`} className={`w-8 flex-shrink-0 border-r border-gray-100 relative min-w-[28px] ${isWe ? 'bg-gray-50' : 'bg-white'}`}>{content}</div>
-                                        })
-                                    })}</div>
-                                </div>
-                            ))}
-                        </React.Fragment>)
-                    })}
-                </div>
-            </div>
-        </div>
-    );
-};
-
 const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
     const { currentUser: user, users, vacations: vacs, holidays, logAction } = useAppContext();
     const [sel, setSel] = useState({ start: null, end: null, count: 0 });
