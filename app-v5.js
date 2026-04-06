@@ -32,6 +32,7 @@ const isHoliday = (d, hConfig = GLOBAL_HOLIDAYS) => { const year = d.getFullYear
 const isWeekend = (d, hConfig = GLOBAL_HOLIDAYS) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, hConfig);
 const countBillableDays = (s, e, hConfig = GLOBAL_HOLIDAYS) => { if (!s || !e) return 0; let c = 0, cur = new Date(s), end = new Date(e); while (cur <= end) { if (!isHoliday(cur, hConfig)) c++; cur.setDate(cur.getDate() + 1); } return c; };
 const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
+
 const getApproverForUser = (user, users) => {
     if (!user || !users) return null;
     if (user.role === 'admin' || user.role === 'ceo') return null; 
@@ -161,9 +162,8 @@ const PersonalYearCalendar = ({ year, onSelectRange, selection, onPrevYear, onNe
             if ((vac || (selection.start && current >= selection.start && current <= (selection.end || selection.start))) && teamVacs.length > 0) indicator = <div className="absolute bottom-0.5 w-1.5 h-1.5 bg-red-500 rounded-full shadow-sm"></div>;
 
             const buildTooltip = () => { let lines = []; if (vac) lines.push(`Я: ${vac.status === 'approved' ? 'Согласовано' : vac.status === 'pending' ? 'На согласовании' : 'Черновик'}`); if (teamVacs.length > 0) { if (vac) lines.push('---'); teamVacs.forEach(v => { const u = users.find(u => u.id === v.userId); if (u) lines.push(`${u.name}: ${v.status === 'approved' ? 'Согласовано' : v.status === 'pending' ? 'Ждет' : 'Черновик'}`); }); } return lines.length > 0 ? lines.join('\n') : null; };
-            const tooltipText = buildTooltip();
 
-            days.push(<div key={`d-${monthIndex}-${d}`} onClick={() => onSelectRange(current)} onMouseEnter={(e) => { if (tooltipText) { const rect = e.target.getBoundingClientRect(); setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 5, text: tooltipText }); } }} onMouseLeave={() => setTooltip(null)} className={`w-8 h-8 flex items-center justify-center text-sm rounded-full transition-colors ${bgClass} ${cellClass}`}>{d}{indicator}</div>);
+            days.push(<div key={`d-${monthIndex}-${d}`} onClick={() => onSelectRange(current)} onMouseEnter={(e) => { const tt = buildTooltip(); if (tt) { const rect = e.target.getBoundingClientRect(); setTooltip({ x: rect.left + rect.width / 2, y: rect.top - 5, text: tt }); } }} onMouseLeave={() => setTooltip(null)} className={`w-8 h-8 flex items-center justify-center text-sm rounded-full transition-colors ${bgClass} ${cellClass}`}>{d}{indicator}</div>);
         }
         return <div key={`m-${monthIndex}`} className="mb-6"><h4 className="font-bold text-gray-800 mb-2 pl-2">{FULL_MONTHS[monthIndex]}</h4><div className="grid grid-cols-7 gap-1 text-center">{WEEKDAYS.map(w => <div key={`wd-${w}`} className="text-xs text-gray-400 font-medium w-8">{w}</div>)}{days}</div></div>;
     };
@@ -271,7 +271,9 @@ const UserView = ({ onAdd, onUpdate, onDel, calendarProps }) => {
     
     const triggerMailto = (approver, datesStr) => {
         if (!approver || !approver.email) return;
-        const mailtoUrl = `mailto:${approver.email}?subject=${encodeURIComponent(`Заявка на отпуск от ${user.name}`)}&body=${encodeURIComponent(`Здравствуйте, ${approver.name}!\r\n\r\nПрошу согласовать мой отпуск на следующие даты:\r\n${datesStr}\r\n\r\nС уважением,\r\n${user.name}`)}`;
+        const subjectText = `Заявка на отпуск от ${user.name}`;
+        const bodyText = `Здравствуйте, ${approver.name}!\r\n\r\nПрошу согласовать мой отпуск на следующие даты:\r\n${datesStr}\r\n\r\nС уважением,\r\n${user.name}`;
+        const mailtoUrl = `mailto:${approver.email}?subject=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(bodyText)}`;
         const link = document.createElement('a'); link.setAttribute('href', mailtoUrl); link.setAttribute('target', '_blank'); document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
@@ -935,7 +937,6 @@ const App = () => {
         const uU = onSnapshot(collection(db,'artifacts',appId,'public','data','users'), s => { const u = s.docs.map(doc=>({_docId:doc.id,...doc.data()})); if(!u.length) INITIAL_USERS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','users'),x)); else setUsers(u); setLoading(false); }, eH);
         const uV = onSnapshot(collection(db,'artifacts',appId,'public','data','vacations'), s => setVacations(s.docs.map(d=>({_docId:d.id,...d.data()}))), eH);
         const uL = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'audit_logs'), s => { const logs = s.docs.map(doc => ({ _docId: doc.id, ...doc.data() })).sort((a,b) => b.timestamp - a.timestamp); setAuditLogs(logs); }, eH);
-
         return () => { uH(); uA(); uD(); uU(); uV(); uL(); };
     }, [firebaseUser]);
 
