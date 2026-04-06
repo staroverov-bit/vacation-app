@@ -14,6 +14,7 @@ const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : (typeof
 
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_HOLIDAYS = { [CURRENT_YEAR]: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'], [CURRENT_YEAR + 1]: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '23-02', '08-03', '01-05', '09-05', '12-06', '04-11'] };
+let GLOBAL_HOLIDAYS = { ...DEFAULT_HOLIDAYS };
 const DEFAULT_AUTH_SETTINGS = { password: true, google: true, yandex: true };
 const MONTHS_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 const FULL_MONTHS = ['ЯНВАРЬ', 'ФЕВРАЛЬ', 'МАРТ', 'АПРЕЛЬ', 'МАЙ', 'ИЮНЬ', 'ИЮЛЬ', 'АВГУСТ', 'СЕНТЯБРЬ', 'ОКТЯБРЬ', 'НОЯБРЬ', 'ДЕКАБРЬ'];
@@ -27,9 +28,9 @@ const INITIAL_USERS_DATA = [
 const AppContext = createContext(null);
 const useAppContext = () => { const context = useContext(AppContext); if (!context) throw new Error("Error"); return context; };
 
-const isHoliday = (d, hConfig) => { const year = d.getFullYear(); const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; return (hConfig[year] || []).includes(dateStr); };
-const isWeekend = (d, hConfig) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, hConfig);
-const countBillableDays = (s, e, hConfig) => { if (!s || !e) return 0; let c = 0, cur = new Date(s), end = new Date(e); while (cur <= end) { if (!isHoliday(cur, hConfig)) c++; cur.setDate(cur.getDate() + 1); } return c; };
+const isHoliday = (d, hConfig = GLOBAL_HOLIDAYS) => { const year = d.getFullYear(); const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}`; return (hConfig[year] || []).includes(dateStr); };
+const isWeekend = (d, hConfig = GLOBAL_HOLIDAYS) => d.getDay() === 0 || d.getDay() === 6 || isHoliday(d, hConfig);
+const countBillableDays = (s, e, hConfig = GLOBAL_HOLIDAYS) => { if (!s || !e) return 0; let c = 0, cur = new Date(s), end = new Date(e); while (cur <= end) { if (!isHoliday(cur, hConfig)) c++; cur.setDate(cur.getDate() + 1); } return c; };
 const isSameDay = (d1, d2) => d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
 const getApproverForUser = (user, users) => {
     if (!user || !users) return null;
@@ -45,7 +46,7 @@ const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-gray-200 animate-fadeIn">
         <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">{isDanger && <AlertTriangle className="w-5 h-5 text-red-500" />}{title}</h3>
-        <p className="text-sm text-gray-600 mb-6 leading-relaxed">{message}</p>
+        <p className="text-sm text-gray-600 mb-6 leading-relaxed whitespace-pre-line">{message}</p>
         <div className="flex gap-3"><button onClick={onCancel} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">Отмена</button><button onClick={onConfirm} className={`flex-1 px-4 py-2 text-white rounded-lg font-medium ${isDanger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>{confirmText}</button></div>
       </div>
     </div>
@@ -408,7 +409,58 @@ const AdminStats = () => {
     const totalUsers = users.filter(u => u.role !== 'admin').length;
     const totalVacationDays = vacations.filter(v => v.status === 'approved').reduce((acc, v) => acc + countBillableDays(v.startDate, v.endDate, holidays), 0);
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center"><div><div className="text-gray-500 text-sm">Сотрудников</div><div className="text-3xl font-bold">{totalUsers}</div></div><Users className="w-8 h-8 text-blue-500 opacity-20"/></div><div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center"><div><div className="text-gray-500 text-sm">Дней отпуска (Согл.)</div><div className="text-3xl font-bold">{totalVacationDays}</div></div><Calendar className="w-8 h-8 text-green-500 opacity-20"/></div></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center"><div><div className="text-gray-500 text-sm">Сотрудников</div><div className="text-3xl font-bold">{totalUsers}</div></div><Users className="w-8 h-8 text-blue-500 opacity-20"/></div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center"><div><div className="text-gray-500 text-sm">Дней отпуска (Согл.)</div><div className="text-3xl font-bold">{totalVacationDays}</div></div><Calendar className="w-8 h-8 text-green-500 opacity-20"/></div>
+        </div>
+    );
+};
+
+const DatabaseBackup = () => {
+    const { users, departments, vacations, holidays, authSettings, logAction, deptDocs } = useAppContext();
+    const fileRef = useRef(null);
+
+    const handleExport = () => {
+        const data = { users, deptDocs, vacations, holidays, authSettings };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `HR_Backup_${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        logAction('SYSTEM_BACKUP', 'Скачан бэкап базы данных (JSON)');
+    };
+
+    const handleImport = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const data = JSON.parse(evt.target.result);
+                const batch = writeBatch(db);
+                if (data.users) data.users.forEach(u => batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId || u.id.toString()), u));
+                if (data.vacations) data.vacations.forEach(v => batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId || v.id.toString()), v));
+                if (data.deptDocs) data.deptDocs.forEach(d => batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'departments', d.id), d));
+                if (data.holidays) batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), data.holidays);
+                if (data.authSettings) batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'auth'), data.authSettings);
+                await batch.commit();
+                logAction('SYSTEM_RESTORE', 'База восстановлена из бэкапа');
+                alert('База данных успешно восстановлена!');
+            } catch(err) { alert('Ошибка импорта: ' + err.message); }
+        };
+        reader.readAsText(file); e.target.value = '';
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><Save className="w-5 h-5 text-gray-500" />Резервное копирование</h3>
+            <p className="text-xs text-gray-500 mb-4">Полная выгрузка и загрузка базы данных (пользователи, отпуска, отделы, настройки).</p>
+            <div className="flex gap-3">
+                <button onClick={handleExport} className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"><Download className="w-4 h-4"/> Скачать JSON</button>
+                <button onClick={() => fileRef.current.click()} className="flex-1 flex items-center justify-center gap-2 bg-orange-50 text-orange-700 py-2 rounded-lg text-sm font-medium hover:bg-orange-100 transition-colors"><Upload className="w-4 h-4"/> Загрузить JSON</button>
+                <input type="file" ref={fileRef} onChange={handleImport} accept=".json" className="hidden" />
+            </div>
+        </div>
     );
 };
 
@@ -738,6 +790,54 @@ const UserManagement = () => {
     );
 };
 
+const DatabaseBackup = () => {
+    const { users, departments, vacations, holidays, authSettings, logAction, deptDocs } = useAppContext();
+    const fileRef = useRef(null);
+
+    const handleExport = () => {
+        const data = { users, deptDocs, vacations, holidays, authSettings };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `HR_Backup_${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        logAction('SYSTEM_BACKUP', 'Скачан бэкап базы данных (JSON)');
+    };
+
+    const handleImport = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            try {
+                const data = JSON.parse(evt.target.result);
+                const batch = writeBatch(db);
+                if (data.users) data.users.forEach(u => batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'users', u._docId || u.id.toString()), u));
+                if (data.vacations) data.vacations.forEach(v => batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'vacations', v._docId || v.id.toString()), v));
+                if (data.deptDocs) data.deptDocs.forEach(d => batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'departments', d.id), d));
+                if (data.holidays) batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), data.holidays);
+                if (data.authSettings) batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'auth'), data.authSettings);
+                await batch.commit();
+                logAction('SYSTEM_RESTORE', 'База восстановлена из бэкапа');
+                alert('База данных успешно восстановлена!');
+            } catch(err) { alert('Ошибка импорта: ' + err.message); }
+        };
+        reader.readAsText(file); e.target.value = '';
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4"><Save className="w-5 h-5 text-gray-500" />Резервное копирование</h3>
+            <p className="text-xs text-gray-500 mb-4">Полная выгрузка и загрузка базы данных (пользователи, отпуска, отделы, настройки).</p>
+            <div className="flex gap-3">
+                <button onClick={handleExport} className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"><Download className="w-4 h-4"/> Скачать JSON</button>
+                <button onClick={() => fileRef.current.click()} className="flex-1 flex items-center justify-center gap-2 bg-orange-50 text-orange-700 py-2 rounded-lg text-sm font-medium hover:bg-orange-100 transition-colors"><Upload className="w-4 h-4"/> Загрузить JSON</button>
+                <input type="file" ref={fileRef} onChange={handleImport} accept=".json" className="hidden" />
+            </div>
+        </div>
+    );
+};
+
 const LoginScreen = ({ onSelectUser }) => {
     const { users, authSettings } = useAppContext();
     const [selectedUserId, setSelectedUserId] = useState(null), [passwordInput, setPasswordInput] = useState(''), [error, setError] = useState(''), [isAdminLogin, setIsAdminLogin] = useState(false), [searchTerm, setSearchTerm] = useState(''), [isSocialLoading, setIsSocialLoading] = useState(false);
@@ -881,7 +981,7 @@ const App = () => {
     useEffect(() => {
         if(!firebaseUser) return;
         const eH = (e) => console.error("DB sync error...", e);
-        const uH = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), s => { if (s.exists()) { const data = s.data(); const newHolidays = { ...DEFAULT_HOLIDAYS }; for (const k in data) newHolidays[k] = data[k]; setHolidays(newHolidays); } }, eH);
+        const uH = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'holidays'), s => { if (s.exists()) { const data = s.data(); const newHolidays = { ...DEFAULT_HOLIDAYS }; for (const k in data) newHolidays[k] = data[k]; setHolidays(newHolidays); Object.assign(GLOBAL_HOLIDAYS, newHolidays); } }, eH);
         const uA = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'auth'), s => { if (s.exists()) { setAuthSettings({ ...DEFAULT_AUTH_SETTINGS, ...s.data() }); } else { setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'auth'), DEFAULT_AUTH_SETTINGS); } }, eH);
         const uD = onSnapshot(collection(db,'artifacts',appId,'public','data','departments'), s => { const d = s.docs.map(doc=>({id:doc.id,...doc.data()})); if(!d.length) INITIAL_DEPARTMENTS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','departments'),x)); else { setDeptDocs(d); setDepartments([...new Set(d.map(x=>x.name))]); } }, eH);
         const uU = onSnapshot(collection(db,'artifacts',appId,'public','data','users'), s => { const u = s.docs.map(doc=>({_docId:doc.id,...doc.data()})); if(!u.length) INITIAL_USERS_DATA.forEach(x=>addDoc(collection(db,'artifacts',appId,'public','data','users'),x)); else setUsers(u); setLoading(false); }, eH);
@@ -900,7 +1000,7 @@ const App = () => {
 
     if (loading) return (<div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-500"><Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" /><p>Загрузка данных...</p></div>);
 
-    const contextValue = { currentUser, users, departments, vacations, holidays, authSettings, auditLogs, logAction };
+    const contextValue = { currentUser, users, departments, vacations, holidays, authSettings, auditLogs, logAction, deptDocs };
 
     return (
         <AppContext.Provider value={contextValue}>
@@ -915,7 +1015,10 @@ const App = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                                     <DepartmentManagement deptDocs={deptDocs} />
                                     <HolidayManagement />
-                                    <AuthSettingsManagement />
+                                    <div className="space-y-6">
+                                         <AuthSettingsManagement />
+                                         <DatabaseBackup />
+                                    </div>
                                 </div>
                                 <AuditLogViewer />
                             </div>
